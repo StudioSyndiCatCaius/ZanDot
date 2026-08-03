@@ -17,6 +17,8 @@ namespace {
 const char *SETTING_DEFAULT_GAME_MODE = "zandot/default_game_mode";
 const char *SETTING_SAVE_GAME_PREFIX = "zandot/save_game_prefix";
 const char *SETTING_SAVE_GLOBAL_NAME = "zandot/save_global_name";
+const char *SETTING_SAVEGAME_SCRIPT_CLASS = "zandot/savegame_script_class";
+const char *SETTING_SAVEGLOBAL_SCRIPT_CLASS = "zandot/saveglobal_script_class";
 } // namespace
 
 void Z::register_settings() {
@@ -42,6 +44,18 @@ void Z::register_settings() {
 	}
 	ps->set_initial_value(SETTING_SAVE_GLOBAL_NAME, String("global"));
 	ps->add_property_info(PropertyInfo(Variant::STRING, SETTING_SAVE_GLOBAL_NAME));
+
+	if (!ps->has_setting(SETTING_SAVEGAME_SCRIPT_CLASS)) {
+		ps->set_setting(SETTING_SAVEGAME_SCRIPT_CLASS, String(""));
+	}
+	ps->set_initial_value(SETTING_SAVEGAME_SCRIPT_CLASS, String(""));
+	ps->add_property_info(PropertyInfo(Variant::STRING, SETTING_SAVEGAME_SCRIPT_CLASS));
+
+	if (!ps->has_setting(SETTING_SAVEGLOBAL_SCRIPT_CLASS)) {
+		ps->set_setting(SETTING_SAVEGLOBAL_SCRIPT_CLASS, String(""));
+	}
+	ps->set_initial_value(SETTING_SAVEGLOBAL_SCRIPT_CLASS, String(""));
+	ps->add_property_info(PropertyInfo(Variant::STRING, SETTING_SAVEGLOBAL_SCRIPT_CLASS));
 }
 
 void Z::create_singleton() {
@@ -194,6 +208,22 @@ String Z::_settings_default_game_mode() const {
 	return "";
 }
 
+String Z::_settings_savegame_script_class() const {
+	ProjectSettings *ps = ProjectSettings::get_singleton();
+	if (ps != nullptr && ps->has_setting(SETTING_SAVEGAME_SCRIPT_CLASS)) {
+		return ps->get_setting(SETTING_SAVEGAME_SCRIPT_CLASS);
+	}
+	return "";
+}
+
+String Z::_settings_saveglobal_script_class() const {
+	ProjectSettings *ps = ProjectSettings::get_singleton();
+	if (ps != nullptr && ps->has_setting(SETTING_SAVEGLOBAL_SCRIPT_CLASS)) {
+		return ps->get_setting(SETTING_SAVEGLOBAL_SCRIPT_CLASS);
+	}
+	return "";
+}
+
 String Z::_slot_path(int p_slot) const {
 	return String("user://") + _settings_save_prefix() + String::num_int64(p_slot) + ".tres";
 }
@@ -204,7 +234,23 @@ String Z::_global_path() const {
 
 Ref<ZSaveGame> Z::save_game_create() {
 	Ref<ZSaveGame> s;
-	s.instantiate();
+	String script_class = _settings_savegame_script_class();
+	if (!script_class.is_empty()) {
+		Ref<Script> script = ResourceLoader::get_singleton()->load(script_class);
+		if (script.is_valid()) {
+			Object *obj = ClassDB::instantiate(script->get_instance_base_type());
+			s = Object::cast_to<ZSaveGame>(obj);
+			if (s.is_null()) {
+				UtilityFunctions::push_warning("Z.save_game_create: custom script class is not a ZSaveGame subclass; using default.");
+				s.instantiate();
+			}
+		} else {
+			UtilityFunctions::push_warning("Z.save_game_create: failed to load custom script class " + script_class + "; using default.");
+			s.instantiate();
+		}
+	} else {
+		s.instantiate();
+	}
 	s->initialize_new();
 	save_game = s;
 	return s;
@@ -254,7 +300,23 @@ bool Z::save_game_save_to_slot(const Ref<ZSaveGame> &p_save, int p_slot) {
 
 Ref<ZSaveGlobal> Z::save_global_create() {
 	Ref<ZSaveGlobal> s;
-	s.instantiate();
+	String script_class = _settings_saveglobal_script_class();
+	if (!script_class.is_empty()) {
+		Ref<Script> script = ResourceLoader::get_singleton()->load(script_class);
+		if (script.is_valid()) {
+			Object *obj = ClassDB::instantiate(script->get_instance_base_type());
+			s = Object::cast_to<ZSaveGlobal>(obj);
+			if (s.is_null()) {
+				UtilityFunctions::push_warning("Z.save_global_create: custom script class is not a ZSaveGlobal subclass; using default.");
+				s.instantiate();
+			}
+		} else {
+			UtilityFunctions::push_warning("Z.save_global_create: failed to load custom script class " + script_class + "; using default.");
+			s.instantiate();
+		}
+	} else {
+		s.instantiate();
+	}
 	s->initialize_new();
 	save_global = s;
 	return s;

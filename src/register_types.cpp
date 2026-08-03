@@ -3,6 +3,8 @@
 #include "z_resource.h"
 #include "nodes/flow_player.h"
 #include "nodes/z.h"
+#include "nodes/z_ability.h"
+#include "nodes/z_ability_manager.h"
 #include "nodes/z_game_mode.h"
 #include "nodes/z_game_state.h"
 #include "nodes/z_input_listener.h"
@@ -72,6 +74,8 @@ void initialize_zandot_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(ZPlayerStart3D);
 		GDREGISTER_CLASS(ZInputListener);
 		GDREGISTER_CLASS(ZMover);
+		GDREGISTER_CLASS(ZAbility);
+		GDREGISTER_CLASS(ZAbilityManager);
 		GDREGISTER_CLASS(Z);
 
 		// ProjectSettings: Project → Project Settings → ZanDot (zandot/*).

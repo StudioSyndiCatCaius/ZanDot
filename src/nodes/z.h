@@ -37,6 +37,8 @@ private:
 	String _settings_save_prefix() const;
 	String _settings_global_name() const;
 	String _settings_default_game_mode() const;
+	String _settings_savegame_script_class() const;
+	String _settings_saveglobal_script_class() const;
 
 protected:
 	static void _bind_methods();

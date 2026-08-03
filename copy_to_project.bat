@@ -3,8 +3,8 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 REM Default: Liberty Belle Christmas game project addons folder.
-REM Override with: copy_to_project.bat "D:\path\to\project\addons\ZanDot"
-set "DEST=%~dp0..\..\Projects\liberty-belle-christmas\addons\ZanDot"
+REM Override with: copy_to_project.bat "C:\path\to\project\addons\ZanDot"
+set "DEST=%~dp0..\LibertyBelle_Christmas\godot\addons\ZanDot"
 if not "%~1"=="" set "DEST=%~1"
 
 echo === Copy ZanDot into Godot project ===
