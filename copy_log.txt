@@ -1,0 +1,10 @@
+=== Copy NeoDot into Godot project ===
+Source: D:\Godot\_gdextensions\NeoDot\
+Dest:   D:\Godot\_gdextensions\NeoDot\..\..\Projects\liberty-belle-christmas\addons\NeoDot
+
+Installed NeoDot to:
+  D:\Godot\_gdextensions\NeoDot\..\..\Projects\liberty-belle-christmas\addons\NeoDot\neodot.gdextension
+  D:\Godot\_gdextensions\NeoDot\..\..\Projects\liberty-belle-christmas\addons\NeoDot\bin\
+
+Restart or reload the Godot editor if it is already open.
+Create resources via: Create New -> Resource -> NeoResource
