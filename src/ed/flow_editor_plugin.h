@@ -98,12 +98,12 @@ class FlowEditorPlugin : public EditorPlugin {
 	// ZResource FileSystem thumbnails from the resource `icon` property.
 	Ref<ZResourcePreviewGenerator> z_preview_generator;
 
-	Ref<FlowGraph> current_graph;
+	Ref<ZFlowGraph> current_graph;
 	String current_path;
 	bool dirty = false;
 
 	PackedStringArray open_paths;
-	TypedArray<FlowGraph> open_graphs;
+	TypedArray<ZFlowGraph> open_graphs;
 
 	HashMap<String, GraphNode *> graph_nodes;
 
@@ -113,7 +113,8 @@ class FlowEditorPlugin : public EditorPlugin {
 		String label;
 		String category;
 		Color color = Color(0.5f, 0.55f, 0.65f, 1.0f);
-		Ref<Texture2D> thumbnail;
+		// Palette row icon: node icon, else thumbnail, else a color swatch.
+		Ref<Texture2D> icon;
 	};
 
 	// Catalog of addable node types (built-ins + script classes). Rebuilt by _rebuild_type_catalog().
@@ -138,12 +139,12 @@ class FlowEditorPlugin : public EditorPlugin {
 	void _refresh_open_list();
 	void _rebuild_graph_view();
 	void _clear_graph_view();
-	GraphNode *_make_graph_node(const Ref<FlowNode> &p_node);
+	GraphNode *_make_graph_node(const Ref<ZFlowNode> &p_node);
 	void _mark_dirty();
 	void _update_path_label();
 	void _select_open_index(int p_index);
 	int _find_open_path(const String &p_path) const;
-	void _open_graph(const Ref<FlowGraph> &p_graph, const String &p_path, bool p_reload_from_disk = false);
+	void _open_graph(const Ref<ZFlowGraph> &p_graph, const String &p_path, bool p_reload_from_disk = false);
 	void _sync_positions_from_view();
 	void _apply_connections_to_view();
 	void _refresh_graph_node_ui(const String &p_node_id);
@@ -154,8 +155,8 @@ class FlowEditorPlugin : public EditorPlugin {
 	String _add_node_of_class(const String &p_class_name, const Vector2 &p_position, const String &p_script_path = String());
 	void _duplicate_selected_nodes();
 
-	// Instantiate by global class name and/or script path (for GDScript FlowNode subclasses).
-	Ref<FlowNode> _instantiate_flow_node(const String &p_class_name, const String &p_script_path = String());
+	// Instantiate by global class name and/or script path (for GDScript ZFlowNode subclasses).
+	Ref<ZFlowNode> _instantiate_flow_node(const String &p_class_name, const String &p_script_path = String());
 	String _resolve_script_path_for_class(const String &p_class_name) const;
 	bool _script_extends_flow_node(const Ref<Script> &p_script) const;
 	Ref<Texture2D> _make_color_icon(const Color &p_color) const;

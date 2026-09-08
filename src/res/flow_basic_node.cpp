@@ -33,3 +33,10 @@ String FlowBasicNode::get_category() const {
 Color FlowBasicNode::get_color() const {
 	return Color(0.50f, 0.55f, 0.65f, 1.0f);
 }
+
+void FlowBasicNode::on_enter(int32_t p_pin, ZFlowPlayer *p_player, ZFlowNode *p_previous_node, int32_t p_previous_out_pin) {
+	ZFlowNode::on_enter(p_pin, p_player, p_previous_node, p_previous_out_pin);
+	if (is_active()) {
+		trigger_output(0);
+	}
+}

@@ -4,8 +4,8 @@
 
 namespace godot {
 
-class FlowStartNode : public FlowNode {
-	GDCLASS(FlowStartNode, FlowNode)
+class FlowStartNode : public ZFlowNode {
+	GDCLASS(FlowStartNode, ZFlowNode)
 
 protected:
 	static void _bind_methods();
@@ -16,6 +16,7 @@ protected:
 
 public:
 	bool is_start_node() const override { return true; }
+	void on_enter(int32_t p_pin, ZFlowPlayer *p_player, ZFlowNode *p_previous_node, int32_t p_previous_out_pin) override;
 
 	FlowStartNode();
 	~FlowStartNode();

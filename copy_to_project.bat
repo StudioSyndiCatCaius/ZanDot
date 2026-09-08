@@ -63,6 +63,11 @@ if "%COPIED%"=="0" (
     exit /b 1
 )
 
+if exist "icons" (
+    if not exist "%DEST%\icons" mkdir "%DEST%\icons"
+    xcopy /Y /E /I "icons\*" "%DEST%\icons\" >nul
+)
+
 echo.
 echo Installed ZanDot to:
 echo   %DEST%\zandot.gdextension

@@ -2,12 +2,14 @@
 
 #include "flow_basic_node.h"
 #include "flow_end_node.h"
+#include "flow_hub_node.h"
 #include "flow_start_node.h"
 
 #include <godot_cpp/classes/class_db_singleton.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 using namespace godot;
@@ -79,89 +81,144 @@ Array _string_array_to_json(const PackedStringArray &p_arr) {
 
 } // namespace
 
-void FlowGraph::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("set_nodes", "nodes"), &FlowGraph::set_nodes);
-	ClassDB::bind_method(D_METHOD("get_nodes"), &FlowGraph::get_nodes);
+void ZFlowGraph::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_nodes", "nodes"), &ZFlowGraph::set_nodes);
+	ClassDB::bind_method(D_METHOD("get_nodes"), &ZFlowGraph::get_nodes);
 
-	ClassDB::bind_method(D_METHOD("set_connections", "connections"), &FlowGraph::set_connections);
-	ClassDB::bind_method(D_METHOD("get_connections"), &FlowGraph::get_connections);
+	ClassDB::bind_method(D_METHOD("set_connections", "connections"), &ZFlowGraph::set_connections);
+	ClassDB::bind_method(D_METHOD("get_connections"), &ZFlowGraph::get_connections);
 
-	ClassDB::bind_method(D_METHOD("set_params", "params"), &FlowGraph::set_params);
-	ClassDB::bind_method(D_METHOD("get_params"), &FlowGraph::get_params);
+	ClassDB::bind_method(D_METHOD("set_params", "params"), &ZFlowGraph::set_params);
+	ClassDB::bind_method(D_METHOD("get_params"), &ZFlowGraph::get_params);
 
-	ClassDB::bind_method(D_METHOD("set_next_id", "next_id"), &FlowGraph::set_next_id);
-	ClassDB::bind_method(D_METHOD("get_next_id"), &FlowGraph::get_next_id);
+	ClassDB::bind_method(D_METHOD("set_next_id", "next_id"), &ZFlowGraph::set_next_id);
+	ClassDB::bind_method(D_METHOD("get_next_id"), &ZFlowGraph::get_next_id);
 
-	ClassDB::bind_method(D_METHOD("ensure_defaults"), &FlowGraph::ensure_defaults);
-	ClassDB::bind_method(D_METHOD("generate_node_id", "prefix"), &FlowGraph::generate_node_id, DEFVAL("node"));
+	ClassDB::bind_method(D_METHOD("ensure_defaults"), &ZFlowGraph::ensure_defaults);
+	ClassDB::bind_method(D_METHOD("generate_node_id", "prefix"), &ZFlowGraph::generate_node_id, DEFVAL("node"));
 
-	ClassDB::bind_method(D_METHOD("add_node", "node"), &FlowGraph::add_node);
-	ClassDB::bind_method(D_METHOD("remove_node", "node_id"), &FlowGraph::remove_node);
-	ClassDB::bind_method(D_METHOD("get_node", "node_id"), &FlowGraph::get_node);
-	ClassDB::bind_method(D_METHOD("get_start_node"), &FlowGraph::get_start_node);
-	ClassDB::bind_method(D_METHOD("has_node", "node_id"), &FlowGraph::has_node);
+	ClassDB::bind_method(D_METHOD("add_node", "node"), &ZFlowGraph::add_node);
+	ClassDB::bind_method(D_METHOD("remove_node", "node_id"), &ZFlowGraph::remove_node);
+	ClassDB::bind_method(D_METHOD("get_node", "node_id"), &ZFlowGraph::get_node);
+	ClassDB::bind_method(D_METHOD("get_start_node"), &ZFlowGraph::get_start_node);
+	ClassDB::bind_method(D_METHOD("find_hub_node", "hub_id"), &ZFlowGraph::find_hub_node);
+	ClassDB::bind_method(D_METHOD("has_node", "node_id"), &ZFlowGraph::has_node);
 
-	ClassDB::bind_method(D_METHOD("add_connection", "from_node", "from_port", "to_node", "to_port"), &FlowGraph::add_connection);
-	ClassDB::bind_method(D_METHOD("remove_connection", "from_node", "from_port", "to_node", "to_port"), &FlowGraph::remove_connection);
-	ClassDB::bind_method(D_METHOD("clear_connections_for_node", "node_id"), &FlowGraph::clear_connections_for_node);
-	ClassDB::bind_method(D_METHOD("get_connections_from", "from_node", "from_port"), &FlowGraph::get_connections_from);
-	ClassDB::bind_method(D_METHOD("get_next_node_id", "from_node", "from_port"), &FlowGraph::get_next_node_id);
+	ClassDB::bind_method(D_METHOD("get_nodes_from_ids", "ids"), &ZFlowGraph::get_nodes_from_ids);
+	ClassDB::bind_method(D_METHOD("get_ids_from_nodes", "nodes"), &ZFlowGraph::get_ids_from_nodes);
 
-	ClassDB::bind_method(D_METHOD("to_dict"), &FlowGraph::to_dict);
-	ClassDB::bind_static_method("FlowGraph", D_METHOD("from_dict", "data"), &FlowGraph::from_dict);
+	ClassDB::bind_method(D_METHOD("add_connection", "from_node", "from_port", "to_node", "to_port"), &ZFlowGraph::add_connection);
+	ClassDB::bind_method(D_METHOD("remove_connection", "from_node", "from_port", "to_node", "to_port"), &ZFlowGraph::remove_connection);
+	ClassDB::bind_method(D_METHOD("clear_connections_for_node", "node_id"), &ZFlowGraph::clear_connections_for_node);
+	ClassDB::bind_method(D_METHOD("get_connections_from", "from_node", "from_port"), &ZFlowGraph::get_connections_from);
+	ClassDB::bind_method(D_METHOD("get_connections_to", "to_node", "to_port"), &ZFlowGraph::get_connections_to, DEFVAL(-1));
+	ClassDB::bind_method(D_METHOD("get_next_node_id", "from_node", "from_port"), &ZFlowGraph::get_next_node_id);
+
+	ClassDB::bind_method(D_METHOD("to_dict"), &ZFlowGraph::to_dict);
+	ClassDB::bind_static_method("ZFlowGraph", D_METHOD("from_dict", "data"), &ZFlowGraph::from_dict);
 
 	// Topology is edited in the Flow main screen — hidden in inspector but stored in .tres.
-	// Hint ensures nested FlowNode resources (incl. script @exports) serialize as sub-resources.
-	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "nodes", PROPERTY_HINT_ARRAY_TYPE, "FlowNode", PROPERTY_USAGE_NO_EDITOR), "set_nodes", "get_nodes");
+	// Hint ensures nested ZFlowNode resources (incl. script @exports) serialize as sub-resources.
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "nodes", PROPERTY_HINT_ARRAY_TYPE, "ZFlowNode", PROPERTY_USAGE_NO_EDITOR), "set_nodes", "get_nodes");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "connections", PROPERTY_HINT_ARRAY_TYPE, "Dictionary", PROPERTY_USAGE_NO_EDITOR), "set_connections", "get_connections");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "next_id", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_next_id", "get_next_id");
 	// User-facing graph params stay visible.
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "params"), "set_params", "get_params");
 }
 
-FlowGraph::FlowGraph() {
+ZFlowGraph::ZFlowGraph() {
 	next_id = 1;
 }
 
-FlowGraph::~FlowGraph() {
+ZFlowGraph::~ZFlowGraph() {
 }
 
-void FlowGraph::set_nodes(const TypedArray<FlowNode> &p_nodes) {
+void ZFlowGraph::_bind_node_ownership(const Ref<ZFlowNode> &p_node) {
+	if (p_node.is_valid()) {
+		p_node->set_owning_graph(this);
+	}
+}
+
+void ZFlowGraph::_unbind_node_ownership(const Ref<ZFlowNode> &p_node) {
+	if (p_node.is_valid() && p_node->get_owning_graph() == this) {
+		p_node->set_owning_graph(nullptr);
+	}
+}
+
+void ZFlowGraph::_rebind_all_ownership() {
+	for (int i = 0; i < nodes.size(); i++) {
+		_bind_node_ownership(nodes[i]);
+	}
+}
+
+void ZFlowGraph::_ensure_unique_node_ids() {
+	// First occurrence of each node_id wins; later duplicates get a new id.
+	HashMap<String, bool> seen;
+	bool changed = false;
+	for (int i = 0; i < nodes.size(); i++) {
+		Ref<ZFlowNode> node = nodes[i];
+		if (node.is_null()) {
+			continue;
+		}
+		String id = node->get_node_id();
+		if (id.is_empty()) {
+			node->set_node_id(generate_node_id("node"));
+			id = node->get_node_id();
+			changed = true;
+		}
+		if (seen.has(id)) {
+			String fresh = generate_node_id("node");
+			UtilityFunctions::push_warning("ZFlowGraph: duplicate node_id '", id, "' — reassigned to '", fresh, "'.");
+			node->set_node_id(fresh);
+			id = fresh;
+			changed = true;
+		}
+		seen[id] = true;
+	}
+	(void)changed;
+}
+
+void ZFlowGraph::set_nodes(const TypedArray<ZFlowNode> &p_nodes) {
+	for (int i = 0; i < nodes.size(); i++) {
+		_unbind_node_ownership(nodes[i]);
+	}
 	nodes = p_nodes;
+	_ensure_unique_node_ids();
+	_rebind_all_ownership();
 	emit_changed();
 }
 
-TypedArray<FlowNode> FlowGraph::get_nodes() const {
+TypedArray<ZFlowNode> ZFlowGraph::get_nodes() const {
 	return nodes;
 }
 
-void FlowGraph::set_connections(const TypedArray<Dictionary> &p_connections) {
+void ZFlowGraph::set_connections(const TypedArray<Dictionary> &p_connections) {
 	connections = p_connections;
 	emit_changed();
 }
 
-TypedArray<Dictionary> FlowGraph::get_connections() const {
+TypedArray<Dictionary> ZFlowGraph::get_connections() const {
 	return connections;
 }
 
-void FlowGraph::set_params(const Dictionary &p_params) {
+void ZFlowGraph::set_params(const Dictionary &p_params) {
 	params = p_params;
 	emit_changed();
 }
 
-Dictionary FlowGraph::get_params() const {
+Dictionary ZFlowGraph::get_params() const {
 	return params;
 }
 
-void FlowGraph::set_next_id(int64_t p_next_id) {
+void ZFlowGraph::set_next_id(int64_t p_next_id) {
 	next_id = p_next_id;
 }
 
-int64_t FlowGraph::get_next_id() const {
+int64_t ZFlowGraph::get_next_id() const {
 	return next_id;
 }
 
-void FlowGraph::ensure_defaults() {
+void ZFlowGraph::ensure_defaults() {
 	if (get_start_node().is_valid()) {
 		return;
 	}
@@ -172,7 +229,7 @@ void FlowGraph::ensure_defaults() {
 	add_node(start);
 }
 
-String FlowGraph::generate_node_id(const String &p_prefix) {
+String ZFlowGraph::generate_node_id(const String &p_prefix) {
 	String id;
 	do {
 		id = p_prefix + String("_") + String::num_int64(next_id++);
@@ -180,27 +237,34 @@ String FlowGraph::generate_node_id(const String &p_prefix) {
 	return id;
 }
 
-void FlowGraph::add_node(const Ref<FlowNode> &p_node) {
+void ZFlowGraph::add_node(const Ref<ZFlowNode> &p_node) {
 	ERR_FAIL_COND(p_node.is_null());
 	if (p_node->get_node_id().is_empty()) {
 		p_node->set_node_id(generate_node_id("node"));
 	}
+	// Never allow two different node resources to share the same id: replace in place.
 	for (int i = 0; i < nodes.size(); i++) {
-		Ref<FlowNode> existing = nodes[i];
+		Ref<ZFlowNode> existing = nodes[i];
 		if (existing.is_valid() && existing->get_node_id() == p_node->get_node_id()) {
+			if (existing != p_node) {
+				_unbind_node_ownership(existing);
+			}
 			nodes[i] = p_node;
+			_bind_node_ownership(p_node);
 			emit_changed();
 			return;
 		}
 	}
 	nodes.push_back(p_node);
+	_bind_node_ownership(p_node);
 	emit_changed();
 }
 
-void FlowGraph::remove_node(const String &p_node_id) {
+void ZFlowGraph::remove_node(const String &p_node_id) {
 	for (int i = 0; i < nodes.size(); i++) {
-		Ref<FlowNode> existing = nodes[i];
+		Ref<ZFlowNode> existing = nodes[i];
 		if (existing.is_valid() && existing->get_node_id() == p_node_id) {
+			_unbind_node_ownership(existing);
 			nodes.remove_at(i);
 			clear_connections_for_node(p_node_id);
 			emit_changed();
@@ -209,31 +273,72 @@ void FlowGraph::remove_node(const String &p_node_id) {
 	}
 }
 
-Ref<FlowNode> FlowGraph::get_node(const String &p_node_id) const {
+Ref<ZFlowNode> ZFlowGraph::get_node(const String &p_node_id) const {
 	for (int i = 0; i < nodes.size(); i++) {
-		Ref<FlowNode> existing = nodes[i];
+		Ref<ZFlowNode> existing = nodes[i];
 		if (existing.is_valid() && existing->get_node_id() == p_node_id) {
 			return existing;
 		}
 	}
-	return Ref<FlowNode>();
+	return Ref<ZFlowNode>();
 }
 
-Ref<FlowNode> FlowGraph::get_start_node() const {
+Ref<ZFlowNode> ZFlowGraph::get_start_node() const {
 	for (int i = 0; i < nodes.size(); i++) {
-		Ref<FlowNode> existing = nodes[i];
+		Ref<ZFlowNode> existing = nodes[i];
 		if (existing.is_valid() && existing->is_start_node()) {
 			return existing;
 		}
 	}
-	return Ref<FlowNode>();
+	return Ref<ZFlowNode>();
 }
 
-bool FlowGraph::has_node(const String &p_node_id) const {
+Ref<ZFlowNode> ZFlowGraph::find_hub_node(const StringName &p_hub_id) const {
+	if (p_hub_id == StringName()) {
+		return Ref<ZFlowNode>();
+	}
+	for (int i = 0; i < nodes.size(); i++) {
+		Ref<ZFlowHubNode> hub = nodes[i];
+		if (hub.is_valid() && hub->get_hub_id() == p_hub_id) {
+			return hub;
+		}
+	}
+	return Ref<ZFlowNode>();
+}
+
+bool ZFlowGraph::has_node(const String &p_node_id) const {
 	return get_node(p_node_id).is_valid();
 }
 
-void FlowGraph::add_connection(const String &p_from_node, int32_t p_from_port, const String &p_to_node, int32_t p_to_port) {
+TypedArray<ZFlowNode> ZFlowGraph::get_nodes_from_ids(const PackedInt64Array &p_ids) const {
+	TypedArray<ZFlowNode> result;
+	for (int i = 0; i < p_ids.size(); i++) {
+		int64_t want = p_ids[i];
+		for (int j = 0; j < nodes.size(); j++) {
+			Ref<ZFlowNode> n = nodes[j];
+			if (n.is_valid() && (int64_t)n->get_instance_id() == want) {
+				result.push_back(n);
+				break;
+			}
+		}
+	}
+	return result;
+}
+
+PackedInt64Array ZFlowGraph::get_ids_from_nodes(const TypedArray<ZFlowNode> &p_nodes) const {
+	PackedInt64Array result;
+	for (int i = 0; i < p_nodes.size(); i++) {
+		Ref<ZFlowNode> n = p_nodes[i];
+		if (n.is_valid()) {
+			result.push_back((int64_t)n->get_instance_id());
+		} else {
+			result.push_back(0);
+		}
+	}
+	return result;
+}
+
+void ZFlowGraph::add_connection(const String &p_from_node, int32_t p_from_port, const String &p_to_node, int32_t p_to_port) {
 	for (int i = 0; i < connections.size(); i++) {
 		Dictionary c = connections[i];
 		if (String(c.get("from_node", "")) == p_from_node &&
@@ -252,7 +357,7 @@ void FlowGraph::add_connection(const String &p_from_node, int32_t p_from_port, c
 	emit_changed();
 }
 
-void FlowGraph::remove_connection(const String &p_from_node, int32_t p_from_port, const String &p_to_node, int32_t p_to_port) {
+void ZFlowGraph::remove_connection(const String &p_from_node, int32_t p_from_port, const String &p_to_node, int32_t p_to_port) {
 	for (int i = connections.size() - 1; i >= 0; i--) {
 		Dictionary c = connections[i];
 		if (String(c.get("from_node", "")) == p_from_node &&
@@ -266,7 +371,7 @@ void FlowGraph::remove_connection(const String &p_from_node, int32_t p_from_port
 	}
 }
 
-void FlowGraph::clear_connections_for_node(const String &p_node_id) {
+void ZFlowGraph::clear_connections_for_node(const String &p_node_id) {
 	bool changed = false;
 	for (int i = connections.size() - 1; i >= 0; i--) {
 		Dictionary c = connections[i];
@@ -280,7 +385,7 @@ void FlowGraph::clear_connections_for_node(const String &p_node_id) {
 	}
 }
 
-TypedArray<Dictionary> FlowGraph::get_connections_from(const String &p_from_node, int32_t p_from_port) const {
+TypedArray<Dictionary> ZFlowGraph::get_connections_from(const String &p_from_node, int32_t p_from_port) const {
 	TypedArray<Dictionary> result;
 	for (int i = 0; i < connections.size(); i++) {
 		Dictionary c = connections[i];
@@ -291,7 +396,22 @@ TypedArray<Dictionary> FlowGraph::get_connections_from(const String &p_from_node
 	return result;
 }
 
-String FlowGraph::get_next_node_id(const String &p_from_node, int32_t p_from_port) const {
+TypedArray<Dictionary> ZFlowGraph::get_connections_to(const String &p_to_node, int32_t p_to_port) const {
+	TypedArray<Dictionary> result;
+	for (int i = 0; i < connections.size(); i++) {
+		Dictionary c = connections[i];
+		if (String(c.get("to_node", "")) != p_to_node) {
+			continue;
+		}
+		if (p_to_port >= 0 && int32_t(c.get("to_port", -1)) != p_to_port) {
+			continue;
+		}
+		result.push_back(c);
+	}
+	return result;
+}
+
+String ZFlowGraph::get_next_node_id(const String &p_from_node, int32_t p_from_port) const {
 	TypedArray<Dictionary> list = get_connections_from(p_from_node, p_from_port);
 	if (list.is_empty()) {
 		return String();
@@ -300,7 +420,7 @@ String FlowGraph::get_next_node_id(const String &p_from_node, int32_t p_from_por
 	return c.get("to_node", "");
 }
 
-Dictionary FlowGraph::to_dict() const {
+Dictionary ZFlowGraph::to_dict() const {
 	Dictionary root;
 	root["format"] = 2;
 	root["params"] = params;
@@ -308,12 +428,12 @@ Dictionary FlowGraph::to_dict() const {
 
 	Array node_array;
 	for (int i = 0; i < nodes.size(); i++) {
-		Ref<FlowNode> node = nodes[i];
+		Ref<ZFlowNode> node = nodes[i];
 		if (node.is_null()) {
 			continue;
 		}
 		Dictionary nd;
-		// Prefer script global class name so reloads stay typed (get_class() is always FlowNode for scripts).
+		// Prefer script global class name so reloads stay typed (get_class() is always ZFlowNode for scripts).
 		nd["class"] = node->get_type_name();
 		nd["node_id"] = node->get_node_id();
 		nd["display_name"] = node->get_display_name();
@@ -341,21 +461,21 @@ Dictionary FlowGraph::to_dict() const {
 	return root;
 }
 
-Ref<FlowGraph> FlowGraph::from_dict(const Dictionary &p_data) {
-	Ref<FlowGraph> graph;
+Ref<ZFlowGraph> ZFlowGraph::from_dict(const Dictionary &p_data) {
+	Ref<ZFlowGraph> graph;
 	graph.instantiate();
 
 	graph->set_params(p_data.get("params", Dictionary()));
 	graph->set_next_id((int64_t)p_data.get("next_id", 1));
 
 	Array node_array = p_data.get("nodes", Array());
-	TypedArray<FlowNode> loaded_nodes;
+	TypedArray<ZFlowNode> loaded_nodes;
 	for (int i = 0; i < node_array.size(); i++) {
 		Dictionary nd = node_array[i];
 		String class_name = nd.get("class", "FlowBasicNode");
 		String script_path = nd.get("script", "");
 
-		Ref<FlowNode> node;
+		Ref<ZFlowNode> node;
 
 		// Prefer script attachment path for GDScript / class_name types.
 		if (!script_path.is_empty() && ResourceLoader::get_singleton()->exists(script_path)) {
@@ -368,18 +488,18 @@ Ref<FlowGraph> FlowGraph::from_dict(const Dictionary &p_data) {
 		}
 
 		// Native ClassDB types (Start/End/Basic/C++ subclasses) without a script path.
-		if (node.is_null() && !class_name.is_empty() && class_name != "FlowNode" && ClassDB::can_instantiate(class_name)) {
+		if (node.is_null() && !class_name.is_empty() && class_name != "ZFlowNode" && ClassDB::can_instantiate(class_name)) {
 			Variant inst = ClassDB::instantiate(class_name);
 			Object *obj = inst;
-			FlowNode *flow_node = Object::cast_to<FlowNode>(obj);
+			ZFlowNode *flow_node = Object::cast_to<ZFlowNode>(obj);
 			if (flow_node) {
-				node = Ref<FlowNode>(flow_node);
+				node = Ref<ZFlowNode>(flow_node);
 			}
 		}
 
 		if (node.is_null()) {
-			if (class_name != "FlowBasicNode" && class_name != "FlowNode") {
-				UtilityFunctions::push_warning("FlowGraph: could not instantiate '", class_name, "', using FlowBasicNode.");
+			if (class_name != "FlowBasicNode" && class_name != "ZFlowNode") {
+				UtilityFunctions::push_warning("ZFlowGraph: could not instantiate '", class_name, "', using FlowBasicNode.");
 			}
 			Ref<FlowBasicNode> basic;
 			basic.instantiate();

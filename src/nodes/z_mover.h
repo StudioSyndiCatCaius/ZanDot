@@ -7,6 +7,7 @@
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/variant/basis.hpp>
+#include <godot_cpp/variant/quaternion.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
@@ -30,20 +31,23 @@ private:
 	bool wish_pending = false;
 	bool apply_gravity = true;
 	bool auto_find_body = true;
+	// Elapsed time (seconds) since the body was last grounded; drives gravity_accel_curve.
+	double fall_time = 0.0;
 
 	void _ensure_move_mode();
 	void _resolve_bodies_if_needed();
-	float _project_gravity_strength() const;
+	float _project_gravity_strength(float p_fall_time) const;
 	Vector3 _project_onto_plane(const Vector3 &p_vec, const Vector3 &p_normal) const;
 	Vector3 _split_vertical(const Vector3 &p_vel, const Vector3 &p_up, Vector3 &r_horizontal) const;
 	// Body forward projected onto the movement plane (unit or zero).
 	Vector3 _body_forward_on_plane(const Vector3 &p_up) const;
 	// Rotate body toward p_target_dir (on movement plane). Rate from ZMoveMode.
 	void _rotate_body_toward(const Vector3 &p_target_dir, const Vector3 &p_up, double p_delta);
-	void _integrate_horizontal(double p_delta, const Vector3 &p_up);
-	void _integrate_gravity(double p_delta, const Vector3 &p_up);
+	void _integrate_horizontal(double p_delta, const Vector3 &p_up, bool p_grounded);
+	void _integrate_gravity(double p_delta, const Vector3 &p_up, bool p_grounded);
 	void _apply_to_bodies(double p_delta);
-	Basis _look_to_basis(const Variant &p_look) const;
+	// Apply wish_dir from input relative to a look basis (camera -Z forward / +X right).
+	void _move_by_look_basis(const Vector2 &p_input, const Basis &p_basis);
 
 protected:
 	static void _bind_methods();
@@ -71,17 +75,29 @@ public:
 	// World-aligned move. input.x = +X, input.y = +Z (3D) / +Y (2D planar use).
 	// 3D uses XZ; 2D uses XY. Magnitude > 1 is clamped.
 	void move_by_input(const Vector2 &p_input);
-	// Camera/look-relative move. p_look accepts Basis, Quaternion, Transform3D,
-	// Vector3 (forward), float (2D radians), or Node2D/Node3D (uses global basis/rotation).
-	void move_by_look(const Vector2 &p_input, const Variant &p_look);
+	// Camera/look-relative move. p_rotation is Euler radians (same as Node3D.rotation /
+	// ZPlayer.control_rotation). Builds a look basis and projects input onto the move plane.
+	void move_by_look(const Vector2 &p_input, const Vector3 &p_rotation);
+	// Same as move_by_look, but p_rotation_degrees is Euler degrees (Node3D.rotation_degrees).
+	void move_by_look_degrees(const Vector2 &p_input, const Vector3 &p_rotation_degrees);
+	// Same as move_by_look, but orientation is a Quaternion.
+	void move_by_look_quaternion(const Vector2 &p_input, const Quaternion &p_look);
+	// Same as move_by_input, but the wish direction is derived from a world-space
+	// target point instead of axis input (full-speed toward p_position this frame;
+	// not async — call every frame like the other Move_By* methods).
+	void move_to_position(const Vector3 &p_position);
 	// Impulse-style launch. dir is direction (normalized internally); scale is speed.
 	// override_side/up replace those components of velocity; otherwise they are added.
-	void launch(const Vector3 &p_dir, float p_scale, bool p_override_side_velocity = true, bool p_override_up_velocity = true);
+	// reset_gravity_curve zeroes fall_time, restarting gravity_accel_curve sampling from its start.
+	void launch(const Vector3 &p_dir, float p_scale, bool p_override_side_velocity = true, bool p_override_up_velocity = true, bool p_reset_gravity_curve = false);
 
 	// Spec-style names.
 	void Move_ByInput(const Vector2 &p_input);
-	void Move_ByLook(const Vector2 &p_input, const Variant &p_look);
-	void Launch(const Vector3 &p_dir, float p_scale, bool p_override_side_velocity = true, bool p_override_up_velocity = true);
+	void Move_ByLook(const Vector2 &p_input, const Vector3 &p_rotation);
+	void Move_ByLookDegrees(const Vector2 &p_input, const Vector3 &p_rotation_degrees);
+	void Move_ByLookQuaternion(const Vector2 &p_input, const Quaternion &p_look);
+	void Move_ToPosition(const Vector3 &p_position);
+	void Launch(const Vector3 &p_dir, float p_scale, bool p_override_side_velocity = true, bool p_override_up_velocity = true, bool p_reset_gravity_curve = false);
 
 	// True if standing on floor (3D or 2D body).
 	bool is_on_floor() const;

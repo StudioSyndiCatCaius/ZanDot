@@ -5,8 +5,8 @@
 namespace godot {
 
 // Default concrete pass-through node (one in, one out).
-class FlowBasicNode : public FlowNode {
-	GDCLASS(FlowBasicNode, FlowNode)
+class FlowBasicNode : public ZFlowNode {
+	GDCLASS(FlowBasicNode, ZFlowNode)
 
 protected:
 	static void _bind_methods();
@@ -16,6 +16,8 @@ protected:
 	Color get_color() const override;
 
 public:
+	void on_enter(int32_t p_pin, ZFlowPlayer *p_player, ZFlowNode *p_previous_node, int32_t p_previous_out_pin) override;
+
 	FlowBasicNode();
 	~FlowBasicNode();
 };

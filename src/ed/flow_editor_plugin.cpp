@@ -32,6 +32,9 @@
 
 using namespace godot;
 
+// Floor for the body thumbnail; it grows with the node width from there.
+static constexpr int THUMBNAIL_MIN_SIZE = 64;
+
 // ---------------------------------------------------------------------------
 // FlowPaletteList
 // ---------------------------------------------------------------------------
@@ -63,7 +66,7 @@ Variant FlowPaletteList::_get_drag_data(const Vector2 &p_at_position) {
 	swatch->set_custom_minimum_size(Vector2(14, 14));
 	Ref<StyleBoxFlat> sb;
 	sb.instantiate();
-	Ref<FlowNode> tmp = plugin->_instantiate_flow_node(class_name, script_path);
+	Ref<ZFlowNode> tmp = plugin->_instantiate_flow_node(class_name, script_path);
 	Color col = tmp.is_valid() ? tmp->get_color_bind() : Color(0.5f, 0.5f, 0.5f);
 	sb->set_bg_color(col);
 	sb->set_corner_radius_all(2);
@@ -136,6 +139,7 @@ void FlowEditorPlugin::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_on_node_inspector_property_edited", "property"), &FlowEditorPlugin::_on_node_inspector_property_edited);
 	ClassDB::bind_method(D_METHOD("_on_graph_property_changed", "property", "value", "field", "changing", "node_id"), &FlowEditorPlugin::_on_graph_property_changed);
 	ClassDB::bind_method(D_METHOD("_refresh_palette"), &FlowEditorPlugin::_refresh_palette);
+	ClassDB::bind_method(D_METHOD("_rebuild_graph_view"), &FlowEditorPlugin::_rebuild_graph_view);
 }
 
 FlowEditorPlugin::FlowEditorPlugin() {
@@ -159,15 +163,15 @@ void FlowEditorPlugin::_make_visible(bool p_visible) {
 }
 
 bool FlowEditorPlugin::_handles(Object *p_object) const {
-	return Object::cast_to<FlowGraph>(p_object) != nullptr;
+	return Object::cast_to<ZFlowGraph>(p_object) != nullptr;
 }
 
 void FlowEditorPlugin::_edit(Object *p_object) {
-	FlowGraph *graph = Object::cast_to<FlowGraph>(p_object);
+	ZFlowGraph *graph = Object::cast_to<ZFlowGraph>(p_object);
 	if (!graph) {
 		return;
 	}
-	Ref<FlowGraph> ref = Ref<FlowGraph>(graph);
+	Ref<ZFlowGraph> ref = Ref<ZFlowGraph>(graph);
 	String path = graph->get_path();
 	_open_graph(ref, path);
 	_make_visible(true);
@@ -295,7 +299,7 @@ void FlowEditorPlugin::_build_ui() {
 
 	Button *new_btn = memnew(Button);
 	new_btn->set_text("New");
-	new_btn->set_tooltip_text("Create a new FlowGraph");
+	new_btn->set_tooltip_text("Create a new ZFlowGraph");
 	new_btn->connect("pressed", Callable(this, "_on_new_pressed"));
 	toolbar->add_child(new_btn);
 
@@ -358,7 +362,7 @@ void FlowEditorPlugin::_build_ui() {
 	// Godot 4.x+ exposes EditorInspector as a usable Control for custom docks / main screens.
 	// It shows the same property editors as the Inspector dock for whatever Object you pass to edit().
 	node_inspector = memnew(EditorInspector);
-	node_inspector->set_name("FlowNode");
+	node_inspector->set_name("ZFlowNode");
 	node_inspector->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 	node_inspector->connect("property_edited", Callable(this, "_on_node_inspector_property_edited"));
 	right_tabs->add_child(node_inspector);
@@ -422,10 +426,10 @@ bool FlowEditorPlugin::_script_extends_flow_node(const Ref<Script> &p_script) co
 		return false;
 	}
 	StringName base = p_script->get_instance_base_type();
-	if (base == StringName("FlowNode")) {
+	if (base == StringName("ZFlowNode")) {
 		return true;
 	}
-	if (base != StringName() && ClassDB::class_exists(base) && ClassDB::is_parent_class(base, "FlowNode")) {
+	if (base != StringName() && ClassDB::class_exists(base) && ClassDB::is_parent_class(base, "ZFlowNode")) {
 		return true;
 	}
 	Ref<Script> cur = p_script;
@@ -439,11 +443,11 @@ bool FlowEditorPlugin::_script_extends_flow_node(const Ref<Script> &p_script) co
 			guard.insert(path);
 		}
 		StringName gn = cur->get_global_name();
-		if (gn == StringName("FlowNode")) {
+		if (gn == StringName("ZFlowNode")) {
 			return true;
 		}
 		StringName ib = cur->get_instance_base_type();
-		if (ib == StringName("FlowNode") || (ib != StringName() && ClassDB::class_exists(ib) && ClassDB::is_parent_class(ib, "FlowNode"))) {
+		if (ib == StringName("ZFlowNode") || (ib != StringName() && ClassDB::class_exists(ib) && ClassDB::is_parent_class(ib, "ZFlowNode"))) {
 			return true;
 		}
 		cur = cur->get_base_script();
@@ -451,27 +455,27 @@ bool FlowEditorPlugin::_script_extends_flow_node(const Ref<Script> &p_script) co
 	return false;
 }
 
-Ref<FlowNode> FlowEditorPlugin::_instantiate_flow_node(const String &p_class_name, const String &p_script_path) {
+Ref<ZFlowNode> FlowEditorPlugin::_instantiate_flow_node(const String &p_class_name, const String &p_script_path) {
 	String script_path = p_script_path;
 	if (script_path.is_empty() && !p_class_name.is_empty()) {
 		script_path = _resolve_script_path_for_class(p_class_name);
 	}
 
-	// Scripted types: construct native FlowNode, then attach script.
+	// Scripted types: construct native ZFlowNode, then attach script.
 	// ClassDB::instantiate(script_class) is unreliable for GDExtension bases from GDScript.
 	if (!script_path.is_empty()) {
 		if (!ResourceLoader::get_singleton()->exists(script_path)) {
 			UtilityFunctions::push_warning("FlowEditor: script not found: ", script_path);
-			return Ref<FlowNode>();
+			return Ref<ZFlowNode>();
 		}
 		Ref<Resource> res = ResourceLoader::get_singleton()->load(script_path, "Script");
 		Ref<Script> script = res;
 		if (script.is_null()) {
 			UtilityFunctions::push_warning("FlowEditor: failed to load script: ", script_path);
-			return Ref<FlowNode>();
+			return Ref<ZFlowNode>();
 		}
 
-		Ref<FlowNode> node;
+		Ref<ZFlowNode> node;
 		node.instantiate();
 		node->set_script(script);
 		node->rebuild_ports();
@@ -482,20 +486,20 @@ Ref<FlowNode> FlowEditorPlugin::_instantiate_flow_node(const String &p_class_nam
 	}
 
 	// Native / ClassDB-only types (FlowStartNode, FlowEndNode, FlowBasicNode, C++ subclasses).
-	if (p_class_name.is_empty() || p_class_name == "FlowNode") {
-		return Ref<FlowNode>();
+	if (p_class_name.is_empty() || p_class_name == "ZFlowNode") {
+		return Ref<ZFlowNode>();
 	}
 	if (!ClassDB::can_instantiate(p_class_name)) {
-		return Ref<FlowNode>();
+		return Ref<ZFlowNode>();
 	}
 
 	Variant inst = ClassDB::instantiate(p_class_name);
 	Object *obj = inst;
-	FlowNode *raw = Object::cast_to<FlowNode>(obj);
+	ZFlowNode *raw = Object::cast_to<ZFlowNode>(obj);
 	if (!raw) {
-		return Ref<FlowNode>();
+		return Ref<ZFlowNode>();
 	}
-	Ref<FlowNode> node = Ref<FlowNode>(raw);
+	Ref<ZFlowNode> node = Ref<ZFlowNode>(raw);
 	node->rebuild_ports();
 	return node;
 }
@@ -507,7 +511,7 @@ void FlowEditorPlugin::_rebuild_type_catalog() {
 	bool has_start = current_graph.is_valid() && current_graph->get_start_node().is_valid();
 
 	auto add_type = [&](const String &cname, const String &script_path, const String &fallback_label, const String &fallback_category) {
-		if (cname == "FlowNode" && script_path.is_empty()) {
+		if (cname == "ZFlowNode" && script_path.is_empty()) {
 			return;
 		}
 		if (cname == "FlowStartNode" && has_start) {
@@ -526,8 +530,8 @@ void FlowEditorPlugin::_rebuild_type_catalog() {
 		t.color = Color(0.45f, 0.55f, 0.75f, 1.0f);
 
 		// Best-effort preview (listing does not require success).
-		// Non-@tool scripts are placeholders in-editor; FlowNode recovers meta from source.
-		Ref<FlowNode> tmp = _instantiate_flow_node(cname, script_path);
+		// Non-@tool scripts are placeholders in-editor; ZFlowNode recovers meta from source.
+		Ref<ZFlowNode> tmp = _instantiate_flow_node(cname, script_path);
 		if (tmp.is_valid()) {
 			String cap = tmp->get_caption_bind();
 			if (!cap.is_empty() && !cap.contains("(") && !cap.to_lower().contains("placeholder") && !cap.to_lower().contains("attempt to call")) {
@@ -538,9 +542,10 @@ void FlowEditorPlugin::_rebuild_type_catalog() {
 				t.category = cat;
 			}
 			t.color = tmp->get_color_bind();
-			Ref<Texture2D> thumb = tmp->get_thumbnail_bind();
-			if (thumb.is_valid()) {
-				t.thumbnail = thumb;
+			// Palette rows are icon-sized: prefer the titlebar icon, fall back to the thumbnail.
+			t.icon = tmp->get_node_icon_bind();
+			if (t.icon.is_null()) {
+				t.icon = tmp->get_thumbnail_bind();
 			}
 		}
 
@@ -569,11 +574,17 @@ void FlowEditorPlugin::_rebuild_type_catalog() {
 	add_type("FlowStartNode", String(), "Start", "Built-in");
 	add_type("FlowEndNode", String(), "End", "Built-in");
 	add_type("FlowBasicNode", String(), "Basic", "Built-in");
+	add_type("ZFlowHubNode", String(), "Hub", "Built-in");
+	add_type("ZFlowToHubNode", String(), "To Hub", "Built-in");
+	add_type("ZFlowCheckGlobalConditionsNode", String(), "Check Global Conditions", "Built-in");
+	add_type("ZFlowDoGlobalScriptNode", String(), "Do Global Script", "Built-in");
 
-	PackedStringArray inheriters = ClassDB::get_inheriters_from_class("FlowNode");
+	PackedStringArray inheriters = ClassDB::get_inheriters_from_class("ZFlowNode");
 	for (int i = 0; i < inheriters.size(); i++) {
 		String cname = inheriters[i];
-		if (cname == "FlowNode" || cname == "FlowStartNode" || cname == "FlowEndNode" || cname == "FlowBasicNode") {
+		if (cname == "ZFlowNode" || cname == "FlowStartNode" || cname == "FlowEndNode" || cname == "FlowBasicNode" ||
+				cname == "ZFlowHubNode" || cname == "ZFlowToHubNode" ||
+				cname == "ZFlowCheckGlobalConditionsNode" || cname == "ZFlowDoGlobalScriptNode") {
 			continue;
 		}
 		if (!_resolve_script_path_for_class(cname).is_empty()) {
@@ -595,8 +606,8 @@ void FlowEditorPlugin::_rebuild_type_catalog() {
 			continue;
 		}
 
-		bool is_flow = (base == "FlowNode");
-		if (!is_flow && !cname.is_empty() && ClassDB::class_exists(cname) && ClassDB::is_parent_class(cname, "FlowNode")) {
+		bool is_flow = (base == "ZFlowNode");
+		if (!is_flow && !cname.is_empty() && ClassDB::class_exists(cname) && ClassDB::is_parent_class(cname, "ZFlowNode")) {
 			is_flow = true;
 		}
 		if (!is_flow && ResourceLoader::get_singleton()->exists(path)) {
@@ -615,7 +626,7 @@ void FlowEditorPlugin::_rebuild_type_catalog() {
 					continue;
 				}
 				if (line.begins_with("extends")) {
-					if (line.contains("FlowNode")) {
+					if (line.contains("ZFlowNode")) {
 						is_flow = true;
 					}
 					break;
@@ -631,21 +642,21 @@ void FlowEditorPlugin::_rebuild_type_catalog() {
 	}
 
 	// Folder scan for scripts without class_name.
-	if (DirAccess::dir_exists_absolute("res://scripts/flownode")) {
-		Ref<DirAccess> dir = DirAccess::open("res://scripts/flownode");
+	if (DirAccess::dir_exists_absolute("res://scripts/ZFlowNode")) {
+		Ref<DirAccess> dir = DirAccess::open("res://scripts/ZFlowNode");
 		if (dir.is_valid()) {
 			dir->list_dir_begin();
 			String fname = dir->get_next();
 			while (!fname.is_empty()) {
 				if (!dir->current_is_dir() && fname.ends_with(".gd")) {
-					String path = String("res://scripts/flownode/").path_join(fname);
+					String path = String("res://scripts/ZFlowNode/").path_join(fname);
 					String src = FileAccess::get_file_as_string(path);
 					bool is_flow = false;
 					String found_class;
 					PackedStringArray lines = src.split("\n");
 					for (int li = 0; li < lines.size(); li++) {
 						String line = lines[li].strip_edges();
-						if (line.begins_with("extends") && line.contains("FlowNode")) {
+						if (line.begins_with("extends") && line.contains("ZFlowNode")) {
 							is_flow = true;
 						}
 						if (line.begins_with("class_name")) {
@@ -717,7 +728,7 @@ void FlowEditorPlugin::_refresh_palette() {
 		meta["class"] = e.class_name;
 		meta["script"] = e.script_path;
 
-		Ref<Texture2D> icon = e.thumbnail.is_valid() ? e.thumbnail : _make_color_icon(e.color);
+		Ref<Texture2D> icon = e.icon.is_valid() ? e.icon : _make_color_icon(e.color);
 		int idx = palette_list->add_item(e.label, icon);
 		palette_list->set_item_metadata(idx, meta);
 		String tip = e.class_name;
@@ -812,11 +823,11 @@ Dictionary FlowEditorPlugin::_find_property_dict(Object *p_object, const String 
 	return empty;
 }
 
-GraphNode *FlowEditorPlugin::_make_graph_node(const Ref<FlowNode> &p_node) {
+GraphNode *FlowEditorPlugin::_make_graph_node(const Ref<ZFlowNode> &p_node) {
 	GraphNode *gn = memnew(GraphNode);
 	String id = p_node->get_node_id();
 	gn->set_name(id);
-	// Prefer script _get_caption ("Message"), then display_name / type name — never "FlowNode (id)".
+	// Prefer script _get_caption ("Message"), then display_name / type name — never "ZFlowNode (id)".
 	gn->set_title(p_node->get_caption_bind());
 	gn->set_position_offset(p_node->get_position());
 
@@ -839,27 +850,21 @@ GraphNode *FlowEditorPlugin::_make_graph_node(const Ref<FlowNode> &p_node) {
 	gn->add_theme_stylebox_override("titlebar", title_sb);
 	gn->add_theme_stylebox_override("titlebar_selected", title_sb);
 
-	// Optional type thumbnail on the title bar (only when get_thumbnail returns a valid Texture2D).
-	// Applied after the GraphNode is in the tree by callers when needed; here we stash for titlebar
-	// once the internal title HBox exists (safe before enter tree in Godot 4.x).
-	Ref<Texture2D> thumb = p_node->get_thumbnail_bind();
-	if (thumb.is_valid()) {
+	// Optional small icon in the title bar, left of the caption (_get_node_icon).
+	Ref<Texture2D> node_icon = p_node->get_node_icon_bind();
+	if (node_icon.is_valid()) {
 		HBoxContainer *title_box = gn->get_titlebar_hbox();
-		if (title_box) {
-			// Avoid duplicating if rebuild is called twice.
-			if (!title_box->has_node(NodePath("FlowThumbnail"))) {
-				TextureRect *icon = memnew(TextureRect);
-				icon->set_name("FlowThumbnail");
-				icon->set_texture(thumb);
-				icon->set_expand_mode(TextureRect::EXPAND_IGNORE_SIZE);
-				icon->set_stretch_mode(TextureRect::STRETCH_KEEP_ASPECT_CENTERED);
-				icon->set_custom_minimum_size(Vector2(18, 18));
-				icon->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
-				title_box->add_child(icon);
-				if (title_box->get_child_count() > 1) {
-					title_box->move_child(icon, 0);
-				}
-			}
+		// Avoid duplicating if rebuild is called twice.
+		if (title_box && !title_box->has_node(NodePath("FlowNodeIcon"))) {
+			TextureRect *icon = memnew(TextureRect);
+			icon->set_name("FlowNodeIcon");
+			icon->set_texture(node_icon);
+			icon->set_expand_mode(TextureRect::EXPAND_IGNORE_SIZE);
+			icon->set_stretch_mode(TextureRect::STRETCH_KEEP_ASPECT_CENTERED);
+			icon->set_custom_minimum_size(Vector2(18, 18));
+			icon->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
+			title_box->add_child(icon);
+			title_box->move_child(icon, 0);
 		}
 	}
 
@@ -873,7 +878,9 @@ GraphNode *FlowEditorPlugin::_make_graph_node(const Ref<FlowNode> &p_node) {
 	PackedStringArray exposed = p_node->get_graph_exposed_params_bind();
 	int slot_count = inputs.size() > outputs.size() ? inputs.size() : outputs.size();
 
-	if (slot_count == 0 && exposed.is_empty()) {
+	Ref<Texture2D> thumb = p_node->get_thumbnail_bind();
+
+	if (slot_count == 0 && exposed.is_empty() && thumb.is_null()) {
 		Label *spacer = memnew(Label);
 		spacer->set_text(" ");
 		gn->add_child(spacer);
@@ -898,6 +905,20 @@ GraphNode *FlowEditorPlugin::_make_graph_node(const Ref<FlowNode> &p_node) {
 		bool enable_right = i < outputs.size();
 		// Slot index == child index of this row.
 		gn->set_slot(i, enable_left, 0, port_color, enable_right, 0, port_color);
+	}
+
+	// Optional large preview in the node body (_get_thumbnail). Added after the port rows so
+	// slot indices stay aligned with them and the pins stay near the title.
+	if (thumb.is_valid()) {
+		TextureRect *preview = memnew(TextureRect);
+		preview->set_name("FlowThumbnail");
+		preview->set_texture(thumb);
+		preview->set_expand_mode(TextureRect::EXPAND_FIT_WIDTH_PROPORTIONAL);
+		preview->set_stretch_mode(TextureRect::STRETCH_KEEP_ASPECT_CENTERED);
+		preview->set_custom_minimum_size(Vector2(THUMBNAIL_MIN_SIZE, THUMBNAIL_MIN_SIZE));
+		preview->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+		preview->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
+		gn->add_child(preview);
 	}
 
 	// Embed real editor property widgets for params listed by _get_graph_exposed_params().
@@ -935,6 +956,14 @@ GraphNode *FlowEditorPlugin::_make_graph_node(const Ref<FlowNode> &p_node) {
 		gn->add_child(ep);
 	}
 
+	// Optional editor size override (_get_node_size). Zero on an axis = let the node size itself.
+	Vector2 custom_size = p_node->get_node_size_bind();
+	if (custom_size.x > 0.0f || custom_size.y > 0.0f) {
+		gn->set_custom_minimum_size(custom_size);
+		// Deferred: GraphEdit re-applies minimum size on tree entry, which would clamp this away.
+		gn->call_deferred("set_size", custom_size);
+	}
+
 	gn->set_meta("flow_node_id", id);
 	gn->connect("position_offset_changed", Callable(this, "_on_node_moved").bind(id));
 	return gn;
@@ -945,11 +974,29 @@ void FlowEditorPlugin::_refresh_graph_node_ui(const String &p_node_id) {
 		return;
 	}
 	GraphNode *gn = graph_nodes[p_node_id];
-	Ref<FlowNode> node = current_graph->get_node(p_node_id);
+	Ref<ZFlowNode> node = current_graph->get_node(p_node_id);
 	if (!gn || node.is_null()) {
 		return;
 	}
 	gn->set_title(node->get_caption_bind());
+
+	// Thumbnail / icon usually derive from params (e.g. a portrait), so keep them in sync.
+	// Appearing or disappearing changes child count — and with it slot indices — so rebuild.
+	Ref<Texture2D> thumb = node->get_thumbnail_bind();
+	TextureRect *preview = Object::cast_to<TextureRect>(gn->get_node_or_null(NodePath("FlowThumbnail")));
+	if (thumb.is_valid() != (preview != nullptr)) {
+		call_deferred("_rebuild_graph_view");
+		return;
+	}
+	if (preview) {
+		preview->set_texture(thumb);
+	}
+
+	HBoxContainer *title_box = gn->get_titlebar_hbox();
+	TextureRect *icon = title_box ? Object::cast_to<TextureRect>(title_box->get_node_or_null(NodePath("FlowNodeIcon"))) : nullptr;
+	if (icon) {
+		icon->set_texture(node->get_node_icon_bind());
+	}
 
 	TypedArray<Node> children = gn->get_children();
 	for (int i = 0; i < children.size(); i++) {
@@ -973,9 +1020,9 @@ void FlowEditorPlugin::_rebuild_graph_view() {
 		return;
 	}
 
-	TypedArray<FlowNode> nodes = current_graph->get_nodes();
+	TypedArray<ZFlowNode> nodes = current_graph->get_nodes();
 	for (int i = 0; i < nodes.size(); i++) {
-		Ref<FlowNode> node = nodes[i];
+		Ref<ZFlowNode> node = nodes[i];
 		if (node.is_null()) {
 			continue;
 		}
@@ -1043,19 +1090,19 @@ int FlowEditorPlugin::_find_open_path(const String &p_path) const {
 	return -1;
 }
 
-void FlowEditorPlugin::_open_graph(const Ref<FlowGraph> &p_graph, const String &p_path, bool p_reload_from_disk) {
+void FlowEditorPlugin::_open_graph(const Ref<ZFlowGraph> &p_graph, const String &p_path, bool p_reload_from_disk) {
 	if (p_graph.is_null() && p_path.is_empty()) {
 		return;
 	}
 
-	Ref<FlowGraph> graph = p_graph;
+	Ref<ZFlowGraph> graph = p_graph;
 	String path = p_path;
 
 	if (p_reload_from_disk && !path.is_empty()) {
-		Ref<Resource> res = ResourceLoader::get_singleton()->load(path, "FlowGraph", ResourceLoader::CACHE_MODE_IGNORE);
+		Ref<Resource> res = ResourceLoader::get_singleton()->load(path, "ZFlowGraph", ResourceLoader::CACHE_MODE_IGNORE);
 		graph = res;
 		if (graph.is_null()) {
-			UtilityFunctions::push_error("Failed to reload FlowGraph: ", path);
+			UtilityFunctions::push_error("Failed to reload ZFlowGraph: ", path);
 			return;
 		}
 	}
@@ -1106,7 +1153,7 @@ void FlowEditorPlugin::_sync_positions_from_view() {
 		return;
 	}
 	for (const KeyValue<String, GraphNode *> &E : graph_nodes) {
-		Ref<FlowNode> node = current_graph->get_node(E.key);
+		Ref<ZFlowNode> node = current_graph->get_node(E.key);
 		if (node.is_valid() && E.value) {
 			node->set_position(E.value->get_position_offset());
 		}
@@ -1161,7 +1208,7 @@ String FlowEditorPlugin::_add_node_of_class(const String &p_class_name, const Ve
 		return String();
 	}
 
-	Ref<FlowNode> node = _instantiate_flow_node(p_class_name, p_script_path);
+	Ref<ZFlowNode> node = _instantiate_flow_node(p_class_name, p_script_path);
 	if (node.is_null()) {
 		UtilityFunctions::push_error("Cannot instantiate flow node: class=", p_class_name, " script=", p_script_path);
 		return String();
@@ -1196,7 +1243,7 @@ void FlowEditorPlugin::_duplicate_selected_nodes() {
 		if (!gn || !gn->is_selected()) {
 			continue;
 		}
-		Ref<FlowNode> src = current_graph->get_node(E.key);
+		Ref<ZFlowNode> src = current_graph->get_node(E.key);
 		if (src.is_null()) {
 			continue;
 		}
@@ -1222,13 +1269,13 @@ void FlowEditorPlugin::_duplicate_selected_nodes() {
 
 	for (int i = 0; i < selected_ids.size(); i++) {
 		const String &old_id = selected_ids[i];
-		Ref<FlowNode> src = current_graph->get_node(old_id);
+		Ref<ZFlowNode> src = current_graph->get_node(old_id);
 		if (src.is_null()) {
 			continue;
 		}
 
 		Ref<Resource> dup_res = src->duplicate(true);
-		Ref<FlowNode> copy = dup_res;
+		Ref<ZFlowNode> copy = dup_res;
 		if (copy.is_null()) {
 			UtilityFunctions::push_error("Failed to duplicate flow node: ", old_id);
 			continue;
@@ -1279,7 +1326,7 @@ void FlowEditorPlugin::_duplicate_selected_nodes() {
 			last_new = E.value;
 		}
 		if (!last_new.is_empty()) {
-			Ref<FlowNode> n = current_graph->get_node(last_new);
+			Ref<ZFlowNode> n = current_graph->get_node(last_new);
 			if (n.is_valid()) {
 				node_inspector->edit(n.ptr());
 				right_tabs->set_current_tab(0);
@@ -1291,7 +1338,7 @@ void FlowEditorPlugin::_duplicate_selected_nodes() {
 }
 
 void FlowEditorPlugin::_on_new_pressed() {
-	Ref<FlowGraph> graph;
+	Ref<ZFlowGraph> graph;
 	graph.instantiate();
 	graph->ensure_defaults();
 	_open_graph(graph, String());
@@ -1369,10 +1416,10 @@ void FlowEditorPlugin::_on_close_pressed() {
 
 void FlowEditorPlugin::_on_open_file_selected(const String &p_path) {
 	// Always load fresh so positions/ports match disk.
-	Ref<Resource> res = ResourceLoader::get_singleton()->load(p_path, "FlowGraph", ResourceLoader::CACHE_MODE_REPLACE);
-	Ref<FlowGraph> graph = res;
+	Ref<Resource> res = ResourceLoader::get_singleton()->load(p_path, "ZFlowGraph", ResourceLoader::CACHE_MODE_REPLACE);
+	Ref<ZFlowGraph> graph = res;
 	if (graph.is_null()) {
-		UtilityFunctions::push_error("Failed to load FlowGraph: ", p_path);
+		UtilityFunctions::push_error("Failed to load ZFlowGraph: ", p_path);
 		return;
 	}
 	_open_graph(graph, p_path, false);
@@ -1403,21 +1450,21 @@ Error FlowEditorPlugin::_save_to_path(const String &p_path) {
 		UtilityFunctions::print("FlowEditor: saving as native resource ", path, " (legacy .gdflow is read-only)");
 	}
 
-	// Nested FlowNodes must be path-less so the text saver embeds them as sub-resources
+	// Nested ZFlowNodes must be path-less so the text saver embeds them as sub-resources
 	// (with their script + @export properties). External refs like Texture2D stay ExtResource.
-	TypedArray<FlowNode> nodes = current_graph->get_nodes();
+	TypedArray<ZFlowNode> nodes = current_graph->get_nodes();
 	for (int i = 0; i < nodes.size(); i++) {
-		Ref<FlowNode> node = nodes[i];
+		Ref<ZFlowNode> node = nodes[i];
 		if (node.is_valid() && !node->get_path().is_empty()) {
 			node->set_path(String());
 		}
 	}
 
-	// Built-in text/binary saver serializes FlowGraph + nested FlowNode properties
+	// Built-in text/binary saver serializes ZFlowGraph + nested ZFlowNode properties
 	// (including GDScript @export fields on scripted nodes).
 	Error err = ResourceSaver::get_singleton()->save(current_graph, path, ResourceSaver::FLAG_CHANGE_PATH | ResourceSaver::FLAG_REPLACE_SUBRESOURCE_PATHS);
 	if (err != OK) {
-		UtilityFunctions::push_error("Failed to save FlowGraph to ", path, " error=", (int)err);
+		UtilityFunctions::push_error("Failed to save ZFlowGraph to ", path, " error=", (int)err);
 		return err;
 	}
 	current_path = path;
@@ -1447,7 +1494,7 @@ void FlowEditorPlugin::_on_open_list_activated(int p_index) {
 	}
 	String path = open_paths[p_index];
 	if (!path.is_empty()) {
-		_open_graph(Ref<FlowGraph>(), path, true);
+		_open_graph(Ref<ZFlowGraph>(), path, true);
 	} else {
 		_select_open_index(p_index);
 	}
@@ -1539,7 +1586,7 @@ void FlowEditorPlugin::_on_node_selected(Node *p_node) {
 		return;
 	}
 	String id = gn->get_meta("flow_node_id", gn->get_name());
-	Ref<FlowNode> node = current_graph->get_node(id);
+	Ref<ZFlowNode> node = current_graph->get_node(id);
 	if (node.is_valid()) {
 		node_inspector->edit(node.ptr());
 		right_tabs->set_current_tab(0);
@@ -1579,7 +1626,7 @@ void FlowEditorPlugin::_on_node_moved(const String &p_node_id) {
 		return;
 	}
 	GraphNode *gn = graph_nodes[p_node_id];
-	Ref<FlowNode> node = current_graph->get_node(p_node_id);
+	Ref<ZFlowNode> node = current_graph->get_node(p_node_id);
 	if (node.is_valid() && gn) {
 		node->set_position(gn->get_position_offset());
 		_mark_dirty();
@@ -1619,7 +1666,7 @@ void FlowEditorPlugin::_on_add_node_menu_id(int32_t p_id) {
 		return;
 	}
 
-	Ref<FlowNode> created = current_graph->get_node(new_id);
+	Ref<ZFlowNode> created = current_graph->get_node(new_id);
 	if (created.is_null()) {
 		return;
 	}
@@ -1659,7 +1706,7 @@ void FlowEditorPlugin::_on_node_inspector_property_edited(const String &p_proper
 	if (!edited && graph_inspector) {
 		edited = graph_inspector->get_edited_object();
 	}
-	FlowNode *flow = Object::cast_to<FlowNode>(edited);
+	ZFlowNode *flow = Object::cast_to<ZFlowNode>(edited);
 	if (flow) {
 		_refresh_graph_node_ui(flow->get_node_id());
 		// Caption may depend on display_name / script fields.
@@ -1675,7 +1722,7 @@ void FlowEditorPlugin::_on_graph_property_changed(const StringName &p_property, 
 	if (current_graph.is_null() || p_node_id.is_empty()) {
 		return;
 	}
-	Ref<FlowNode> node = current_graph->get_node(p_node_id);
+	Ref<ZFlowNode> node = current_graph->get_node(p_node_id);
 	if (node.is_null()) {
 		return;
 	}

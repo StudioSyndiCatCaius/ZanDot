@@ -1,11 +1,15 @@
 #include "flow_node.h"
 
+#include "flow_graph.h"
 #include "nodes/flow_player.h"
 
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
+#include <godot_cpp/templates/local_vector.hpp>
+#include <godot_cpp/variant/vector2i.hpp>
 
 using namespace godot;
 
@@ -188,42 +192,48 @@ void extract_ports_from_source(const String &p_src, PackedStringArray &r_inputs,
 
 } // namespace
 
-void FlowNode::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("set_node_id", "id"), &FlowNode::set_node_id);
-	ClassDB::bind_method(D_METHOD("get_node_id"), &FlowNode::get_node_id);
+void ZFlowNode::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_node_id", "id"), &ZFlowNode::set_node_id);
+	ClassDB::bind_method(D_METHOD("get_node_id"), &ZFlowNode::get_node_id);
 
-	ClassDB::bind_method(D_METHOD("set_display_name", "name"), &FlowNode::set_display_name);
-	ClassDB::bind_method(D_METHOD("get_display_name"), &FlowNode::get_display_name);
+	ClassDB::bind_method(D_METHOD("set_display_name", "name"), &ZFlowNode::set_display_name);
+	ClassDB::bind_method(D_METHOD("get_display_name"), &ZFlowNode::get_display_name);
 
-	ClassDB::bind_method(D_METHOD("set_position", "position"), &FlowNode::set_position);
-	ClassDB::bind_method(D_METHOD("get_position"), &FlowNode::get_position);
+	ClassDB::bind_method(D_METHOD("set_position", "position"), &ZFlowNode::set_position);
+	ClassDB::bind_method(D_METHOD("get_position"), &ZFlowNode::get_position);
 
-	ClassDB::bind_method(D_METHOD("set_inputs", "inputs"), &FlowNode::set_inputs);
-	ClassDB::bind_method(D_METHOD("get_inputs"), &FlowNode::get_inputs);
+	ClassDB::bind_method(D_METHOD("set_inputs", "inputs"), &ZFlowNode::set_inputs);
+	ClassDB::bind_method(D_METHOD("get_inputs"), &ZFlowNode::get_inputs);
 
-	ClassDB::bind_method(D_METHOD("set_outputs", "outputs"), &FlowNode::set_outputs);
-	ClassDB::bind_method(D_METHOD("get_outputs"), &FlowNode::get_outputs);
+	ClassDB::bind_method(D_METHOD("set_outputs", "outputs"), &ZFlowNode::set_outputs);
+	ClassDB::bind_method(D_METHOD("get_outputs"), &ZFlowNode::get_outputs);
 
-	ClassDB::bind_method(D_METHOD("set_params", "params"), &FlowNode::set_params);
-	ClassDB::bind_method(D_METHOD("get_params"), &FlowNode::get_params);
+	ClassDB::bind_method(D_METHOD("set_params", "params"), &ZFlowNode::set_params);
+	ClassDB::bind_method(D_METHOD("get_params"), &ZFlowNode::get_params);
 
-	ClassDB::bind_method(D_METHOD("clear_ports"), &FlowNode::clear_ports);
-	ClassDB::bind_method(D_METHOD("add_input_port", "name"), &FlowNode::add_input_port);
-	ClassDB::bind_method(D_METHOD("add_output_port", "name"), &FlowNode::add_output_port);
-	ClassDB::bind_method(D_METHOD("rebuild_ports"), &FlowNode::rebuild_ports);
+	ClassDB::bind_method(D_METHOD("clear_ports"), &ZFlowNode::clear_ports);
+	ClassDB::bind_method(D_METHOD("add_input_port", "name"), &ZFlowNode::add_input_port);
+	ClassDB::bind_method(D_METHOD("add_output_port", "name"), &ZFlowNode::add_output_port);
+	ClassDB::bind_method(D_METHOD("rebuild_ports"), &ZFlowNode::rebuild_ports);
 
-	ClassDB::bind_method(D_METHOD("get_caption"), &FlowNode::get_caption_bind);
-	ClassDB::bind_method(D_METHOD("get_category"), &FlowNode::get_category_bind);
-	ClassDB::bind_method(D_METHOD("get_color"), &FlowNode::get_color_bind);
-	ClassDB::bind_method(D_METHOD("get_graph_exposed_params"), &FlowNode::get_graph_exposed_params_bind);
-	ClassDB::bind_method(D_METHOD("get_thumbnail"), &FlowNode::get_thumbnail_bind);
-	ClassDB::bind_method(D_METHOD("get_type_name"), &FlowNode::get_type_name);
-	ClassDB::bind_method(D_METHOD("is_start_node"), &FlowNode::is_start_node);
-	ClassDB::bind_method(D_METHOD("is_end_node"), &FlowNode::is_end_node);
+	ClassDB::bind_method(D_METHOD("get_caption"), &ZFlowNode::get_caption_bind);
+	ClassDB::bind_method(D_METHOD("get_category"), &ZFlowNode::get_category_bind);
+	ClassDB::bind_method(D_METHOD("get_color"), &ZFlowNode::get_color_bind);
+	ClassDB::bind_method(D_METHOD("get_graph_exposed_params"), &ZFlowNode::get_graph_exposed_params_bind);
+	ClassDB::bind_method(D_METHOD("get_thumbnail"), &ZFlowNode::get_thumbnail_bind);
+	ClassDB::bind_method(D_METHOD("get_node_icon"), &ZFlowNode::get_node_icon_bind);
+	ClassDB::bind_method(D_METHOD("get_node_size"), &ZFlowNode::get_node_size_bind);
+	ClassDB::bind_method(D_METHOD("get_type_name"), &ZFlowNode::get_type_name);
+	ClassDB::bind_method(D_METHOD("is_start_node"), &ZFlowNode::is_start_node);
+	ClassDB::bind_method(D_METHOD("is_end_node"), &ZFlowNode::is_end_node);
+	ClassDB::bind_method(D_METHOD("is_active"), &ZFlowNode::is_active);
+	ClassDB::bind_method(D_METHOD("get_graph"), &ZFlowNode::get_graph_bind);
+	ClassDB::bind_method(D_METHOD("get_player"), &ZFlowNode::get_runtime_player);
 
-	ClassDB::bind_method(D_METHOD("on_enter", "player"), &FlowNode::on_enter);
-	ClassDB::bind_method(D_METHOD("on_exit", "player"), &FlowNode::on_exit);
-	ClassDB::bind_method(D_METHOD("choose_output", "player"), &FlowNode::choose_output);
+	ClassDB::bind_method(D_METHOD("get_connected_nodes", "input", "output", "input_pin", "output_pin"), &ZFlowNode::get_connected_nodes, DEFVAL(-1), DEFVAL(-1));
+	ClassDB::bind_method(D_METHOD("trigger_output", "output", "connection", "stop_node"), &ZFlowNode::trigger_output, DEFVAL(-1), DEFVAL(true));
+	ClassDB::bind_method(D_METHOD("trigger_output_to_node", "node", "input", "only_if_connected", "stop_node"), &ZFlowNode::trigger_output_to_node, DEFVAL(0), DEFVAL(true), DEFVAL(true));
+	ClassDB::bind_method(D_METHOD("stop_node"), &ZFlowNode::stop_node);
 
 	// Inspector: only user-facing fields. Graph topology / layout edited in the graph view.
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "node_id"), "set_node_id", "get_node_id");
@@ -240,21 +250,23 @@ void FlowNode::_bind_methods() {
 	GDVIRTUAL_BIND(_get_caption);
 	GDVIRTUAL_BIND(_get_category);
 	GDVIRTUAL_BIND(_get_graph_exposed_params);
-	GDVIRTUAL_BIND(_on_enter, "player");
-	GDVIRTUAL_BIND(_on_exit, "player");
-	GDVIRTUAL_BIND(_choose_output, "player");
+	GDVIRTUAL_BIND(_get_node_size);
+	GDVIRTUAL_BIND(_on_enter, "pin", "player", "previous_node", "previous_out_pin");
+	GDVIRTUAL_BIND(_on_exit, "pin", "player");
 }
 
-FlowNode::FlowNode() {
+ZFlowNode::ZFlowNode() {
 	node_id = "";
 	display_name = "";
 	position = Vector2(0, 0);
+	// Native instances (and GDScript bases before _define) start with 1 in / 1 out.
+	rebuild_ports();
 }
 
-FlowNode::~FlowNode() {
+ZFlowNode::~ZFlowNode() {
 }
 
-bool FlowNode::_is_bad_meta_string(const String &p_s) {
+bool ZFlowNode::_is_bad_meta_string(const String &p_s) {
 	if (p_s.is_empty()) {
 		return true;
 	}
@@ -271,7 +283,7 @@ bool FlowNode::_is_bad_meta_string(const String &p_s) {
 	return false;
 }
 
-Ref<Script> FlowNode::_get_attached_script() const {
+Ref<Script> ZFlowNode::_get_attached_script() const {
 	Variant script_var = get_script();
 	if (script_var.get_type() != Variant::OBJECT) {
 		return Ref<Script>();
@@ -279,7 +291,7 @@ Ref<Script> FlowNode::_get_attached_script() const {
 	return script_var;
 }
 
-bool FlowNode::_script_methods_safe() const {
+bool ZFlowNode::_script_methods_safe() const {
 	Ref<Script> script = _get_attached_script();
 	if (script.is_null()) {
 		return false;
@@ -293,7 +305,7 @@ bool FlowNode::_script_methods_safe() const {
 	return true;
 }
 
-String FlowNode::_get_script_source() const {
+String ZFlowNode::_get_script_source() const {
 	Ref<Script> script = _get_attached_script();
 	if (script.is_null()) {
 		return String();
@@ -308,7 +320,7 @@ String FlowNode::_get_script_source() const {
 	return String();
 }
 
-bool FlowNode::_apply_ports_from_script_source() {
+bool ZFlowNode::_apply_ports_from_script_source() {
 	String src = _get_script_source();
 	if (src.is_empty()) {
 		return false;
@@ -324,7 +336,7 @@ bool FlowNode::_apply_ports_from_script_source() {
 	return true;
 }
 
-String FlowNode::_parse_script_string_return(const String &p_func_name) const {
+String ZFlowNode::_parse_script_string_return(const String &p_func_name) const {
 	String src = _get_script_source();
 	if (src.is_empty()) {
 		return String();
@@ -332,7 +344,7 @@ String FlowNode::_parse_script_string_return(const String &p_func_name) const {
 	return extract_return_string_after_func(src, p_func_name);
 }
 
-Color FlowNode::_parse_script_color_return(const String &p_func_name) const {
+Color ZFlowNode::_parse_script_color_return(const String &p_func_name) const {
 	String src = _get_script_source();
 	if (src.is_empty()) {
 		return Color();
@@ -340,7 +352,7 @@ Color FlowNode::_parse_script_color_return(const String &p_func_name) const {
 	return extract_return_color_after_func(src, p_func_name);
 }
 
-PackedStringArray FlowNode::_parse_script_string_array_return(const String &p_func_name) const {
+PackedStringArray ZFlowNode::_parse_script_string_array_return(const String &p_func_name) const {
 	String src = _get_script_source();
 	if (src.is_empty()) {
 		return PackedStringArray();
@@ -348,7 +360,7 @@ PackedStringArray FlowNode::_parse_script_string_array_return(const String &p_fu
 	return extract_string_array_after_func(src, p_func_name);
 }
 
-bool FlowNode::_script_has_method(const StringName &p_method) const {
+bool ZFlowNode::_script_has_method(const StringName &p_method) const {
 	// IMPORTANT: Do not use Object::has_method() for dispatch — that is true for our own
 	// ClassDB-bound wrappers (e.g. get_thumbnail -> get_thumbnail_bind) and causes recursion.
 	Ref<Script> script = _get_attached_script();
@@ -365,7 +377,7 @@ bool FlowNode::_script_has_method(const StringName &p_method) const {
 	return false;
 }
 
-bool FlowNode::_call_script_void(const StringName &p_method) {
+bool ZFlowNode::_call_script_void(const StringName &p_method) {
 	if (!_script_methods_safe() || !_script_has_method(p_method)) {
 		return false;
 	}
@@ -373,33 +385,36 @@ bool FlowNode::_call_script_void(const StringName &p_method) {
 	return true;
 }
 
-bool FlowNode::_call_script_ret(const StringName &p_method, Variant &r_ret) const {
+bool ZFlowNode::_call_script_ret(const StringName &p_method, Variant &r_ret) const {
 	if (!_script_methods_safe() || !_script_has_method(p_method)) {
 		return false;
 	}
-	FlowNode *self = const_cast<FlowNode *>(this);
+	ZFlowNode *self = const_cast<ZFlowNode *>(this);
 	r_ret = self->call(p_method);
 	return true;
 }
 
-void FlowNode::clear_ports() {
+void ZFlowNode::clear_ports() {
 	inputs.clear();
 	outputs.clear();
 }
 
-void FlowNode::add_input_port(const String &p_name) {
+void ZFlowNode::add_input_port(const String &p_name) {
 	inputs.push_back(p_name);
 }
 
-void FlowNode::add_output_port(const String &p_name) {
+void ZFlowNode::add_output_port(const String &p_name) {
 	outputs.push_back(p_name);
 }
 
-void FlowNode::define() {
-	// Abstract default: no ports. Concrete subclasses override.
+void ZFlowNode::define() {
+	// Default flow topology: one input, one output. Override to customize
+	// (Start/End/Hub/ToHub and scripted nodes that need different pins).
+	add_input_port("in");
+	add_output_port("out");
 }
 
-void FlowNode::rebuild_ports() {
+void ZFlowNode::rebuild_ports() {
 	clear_ports();
 	bool ran = false;
 
@@ -422,10 +437,18 @@ void FlowNode::rebuild_ports() {
 	if (!ran) {
 		define();
 	}
+
+	// If nothing declared pins (e.g. empty _define), still get the default 1 in / 1 out.
+	// Asymmetric nodes (Start/End/Hub/ToHub) leave one side empty on purpose — only
+	// apply defaults when both sides are empty.
+	if (inputs.is_empty() && outputs.is_empty()) {
+		add_input_port("in");
+		add_output_port("out");
+	}
 	emit_changed();
 }
 
-void FlowNode::set_node_id(const String &p_id) {
+void ZFlowNode::set_node_id(const String &p_id) {
 	if (node_id == p_id) {
 		return;
 	}
@@ -433,11 +456,11 @@ void FlowNode::set_node_id(const String &p_id) {
 	emit_changed();
 }
 
-String FlowNode::get_node_id() const {
+String ZFlowNode::get_node_id() const {
 	return node_id;
 }
 
-void FlowNode::set_display_name(const String &p_name) {
+void ZFlowNode::set_display_name(const String &p_name) {
 	if (display_name == p_name) {
 		return;
 	}
@@ -445,11 +468,11 @@ void FlowNode::set_display_name(const String &p_name) {
 	emit_changed();
 }
 
-String FlowNode::get_display_name() const {
+String ZFlowNode::get_display_name() const {
 	return display_name;
 }
 
-void FlowNode::set_position(const Vector2 &p_position) {
+void ZFlowNode::set_position(const Vector2 &p_position) {
 	if (position == p_position) {
 		return;
 	}
@@ -457,38 +480,38 @@ void FlowNode::set_position(const Vector2 &p_position) {
 	emit_changed();
 }
 
-Vector2 FlowNode::get_position() const {
+Vector2 ZFlowNode::get_position() const {
 	return position;
 }
 
-void FlowNode::set_inputs(const PackedStringArray &p_inputs) {
+void ZFlowNode::set_inputs(const PackedStringArray &p_inputs) {
 	inputs = p_inputs;
 	emit_changed();
 }
 
-PackedStringArray FlowNode::get_inputs() const {
+PackedStringArray ZFlowNode::get_inputs() const {
 	return inputs;
 }
 
-void FlowNode::set_outputs(const PackedStringArray &p_outputs) {
+void ZFlowNode::set_outputs(const PackedStringArray &p_outputs) {
 	outputs = p_outputs;
 	emit_changed();
 }
 
-PackedStringArray FlowNode::get_outputs() const {
+PackedStringArray ZFlowNode::get_outputs() const {
 	return outputs;
 }
 
-void FlowNode::set_params(const Dictionary &p_params) {
+void ZFlowNode::set_params(const Dictionary &p_params) {
 	params = p_params;
 	emit_changed();
 }
 
-Dictionary FlowNode::get_params() const {
+Dictionary ZFlowNode::get_params() const {
 	return params;
 }
 
-String FlowNode::get_type_name() const {
+String ZFlowNode::get_type_name() const {
 	Ref<Script> script = _get_attached_script();
 	if (script.is_valid()) {
 		StringName gn = script->get_global_name();
@@ -503,30 +526,38 @@ String FlowNode::get_type_name() const {
 	return String(get_class());
 }
 
-String FlowNode::get_caption() const {
+String ZFlowNode::get_caption() const {
 	if (!display_name.is_empty()) {
 		return display_name;
 	}
 	return get_type_name();
 }
 
-String FlowNode::get_category() const {
+String ZFlowNode::get_category() const {
 	return "Custom";
 }
 
-Color FlowNode::get_color() const {
+Color ZFlowNode::get_color() const {
 	return Color(0.45f, 0.50f, 0.58f, 1.0f);
 }
 
-PackedStringArray FlowNode::get_graph_exposed_params() const {
+PackedStringArray ZFlowNode::get_graph_exposed_params() const {
 	return PackedStringArray();
 }
 
-Ref<Texture2D> FlowNode::get_thumbnail() const {
+Ref<Texture2D> ZFlowNode::get_thumbnail() const {
 	return Ref<Texture2D>();
 }
 
-String FlowNode::get_caption_bind() const {
+Ref<Texture2D> ZFlowNode::get_node_icon() const {
+	return Ref<Texture2D>();
+}
+
+Vector2 ZFlowNode::get_node_size() const {
+	return Vector2();
+}
+
+String ZFlowNode::get_caption_bind() const {
 	if (_script_methods_safe()) {
 		String result;
 		if (GDVIRTUAL_CALL(_get_caption, result) && !_is_bad_meta_string(result)) {
@@ -548,7 +579,7 @@ String FlowNode::get_caption_bind() const {
 	return get_caption();
 }
 
-String FlowNode::get_category_bind() const {
+String ZFlowNode::get_category_bind() const {
 	if (_script_methods_safe()) {
 		String result;
 		if (GDVIRTUAL_CALL(_get_category, result) && !_is_bad_meta_string(result)) {
@@ -570,7 +601,7 @@ String FlowNode::get_category_bind() const {
 	return get_category();
 }
 
-Color FlowNode::get_color_bind() const {
+Color ZFlowNode::get_color_bind() const {
 	if (_script_methods_safe()) {
 		Color result;
 		if (GDVIRTUAL_CALL(_get_color, result)) {
@@ -597,7 +628,7 @@ Color FlowNode::get_color_bind() const {
 	return get_color();
 }
 
-PackedStringArray FlowNode::get_graph_exposed_params_bind() const {
+PackedStringArray ZFlowNode::get_graph_exposed_params_bind() const {
 	if (_script_methods_safe()) {
 		PackedStringArray result;
 		if (GDVIRTUAL_CALL(_get_graph_exposed_params, result)) {
@@ -640,79 +671,310 @@ PackedStringArray FlowNode::get_graph_exposed_params_bind() const {
 	return get_graph_exposed_params();
 }
 
-Ref<Texture2D> FlowNode::get_thumbnail_bind() const {
+// Script texture getters: call `_get_*` only (never the `get_*` bound wrapper — that is the caller).
+Ref<Texture2D> ZFlowNode::_script_texture(const StringName &p_method) const {
+	if (!_script_methods_safe()) {
+		return Ref<Texture2D>();
+	}
+	Variant v;
+	if (!_call_script_ret(p_method, v) || v.get_type() != Variant::OBJECT || !v) {
+		return Ref<Texture2D>();
+	}
+	Object *obj = v;
+	if (!obj) {
+		return Ref<Texture2D>();
+	}
+	return Ref<Texture2D>(Object::cast_to<Texture2D>(obj));
+}
+
+Ref<Texture2D> ZFlowNode::get_thumbnail_bind() const {
 	// C++ override first.
 	Ref<Texture2D> cpp_tex = get_thumbnail();
 	if (cpp_tex.is_valid()) {
 		return cpp_tex;
 	}
-
-	if (!_script_methods_safe()) {
-		return Ref<Texture2D>();
-	}
-
-	// Script: only `_get_thumbnail` (never call `get_thumbnail` — that is this bound method).
-	auto as_tex = [](const Variant &v) -> Ref<Texture2D> {
-		if (v.get_type() != Variant::OBJECT || !v) {
-			return Ref<Texture2D>();
-		}
-		Object *obj = v;
-		if (!obj) {
-			return Ref<Texture2D>();
-		}
-		return Object::cast_to<Texture2D>(obj);
-	};
-
-	Variant v;
-	if (_call_script_ret(StringName("_get_thumbnail"), v)) {
-		Ref<Texture2D> tex = as_tex(v);
-		if (tex.is_valid()) {
-			return tex;
-		}
-	}
-	return Ref<Texture2D>();
+	return _script_texture(StringName("_get_thumbnail"));
 }
 
-void FlowNode::on_enter(FlowPlayer *p_player) {
-	Object *player_obj = p_player;
+Ref<Texture2D> ZFlowNode::get_node_icon_bind() const {
+	Ref<Texture2D> cpp_tex = get_node_icon();
+	if (cpp_tex.is_valid()) {
+		return cpp_tex;
+	}
+	return _script_texture(StringName("_get_node_icon"));
+}
+
+Vector2 ZFlowNode::get_node_size_bind() const {
+	if (_script_methods_safe()) {
+		Vector2 result;
+		if (GDVIRTUAL_CALL(_get_node_size, result)) {
+			return result.maxf(0.0f);
+		}
+		Variant v;
+		if (_call_script_ret(StringName("_get_node_size"), v)) {
+			if (v.get_type() == Variant::VECTOR2) {
+				return Vector2(v).maxf(0.0f);
+			}
+			if (v.get_type() == Variant::VECTOR2I) {
+				Vector2i vi = v;
+				return Vector2((real_t)vi.x, (real_t)vi.y).maxf(0.0f);
+			}
+		}
+	}
+	return get_node_size().maxf(0.0f);
+}
+
+void ZFlowNode::set_owning_graph(ZFlowGraph *p_graph) {
+	owning_graph = p_graph;
+}
+
+ZFlowGraph *ZFlowNode::get_owning_graph() const {
+	return owning_graph;
+}
+
+ZFlowPlayer *ZFlowNode::get_runtime_player() const {
+	return runtime_player;
+}
+
+Ref<ZFlowGraph> ZFlowNode::get_graph_bind() const {
+	if (owning_graph != nullptr) {
+		return Ref<ZFlowGraph>(owning_graph);
+	}
+	if (runtime_player != nullptr) {
+		return runtime_player->get_flow_graph();
+	}
+	return Ref<ZFlowGraph>();
+}
+
+void ZFlowNode::_set_runtime_player(ZFlowPlayer *p_player) {
+	runtime_player = p_player;
+}
+
+void ZFlowNode::_set_active_flag(bool p_active) {
+	active = p_active;
+}
+
+bool ZFlowNode::is_active() const {
+	return active;
+}
+
+void ZFlowNode::on_enter(int32_t p_pin, ZFlowPlayer *p_player, ZFlowNode *p_previous_node, int32_t p_previous_out_pin) {
 	if (!_script_methods_safe()) {
 		return;
 	}
-	if (GDVIRTUAL_CALL(_on_enter, player_obj)) {
+	const Ref<ZFlowNode> previous(p_previous_node);
+	if (GDVIRTUAL_CALL(_on_enter, (int64_t)p_pin, p_player, previous, (int64_t)p_previous_out_pin)) {
 		return;
 	}
 	if (_script_has_method(StringName("_on_enter"))) {
-		call("_on_enter", player_obj);
+		call("_on_enter", p_pin, p_player, previous, p_previous_out_pin);
 	}
 }
 
-void FlowNode::on_exit(FlowPlayer *p_player) {
-	Object *player_obj = p_player;
+void ZFlowNode::on_exit(int32_t p_pin, ZFlowPlayer *p_player) {
 	if (!_script_methods_safe()) {
 		return;
 	}
-	if (GDVIRTUAL_CALL(_on_exit, player_obj)) {
+	if (GDVIRTUAL_CALL(_on_exit, (int64_t)p_pin, p_player)) {
 		return;
 	}
 	if (_script_has_method(StringName("_on_exit"))) {
-		call("_on_exit", player_obj);
+		call("_on_exit", p_pin, p_player);
 	}
 }
 
-int64_t FlowNode::choose_output(FlowPlayer *p_player) {
-	int64_t result = 0;
-	Object *player_obj = p_player;
-	if (!_script_methods_safe()) {
-		return 0;
+TypedArray<ZFlowNode> ZFlowNode::get_connected_nodes(bool p_input, bool p_output, int32_t p_input_pin, int32_t p_output_pin) const {
+	TypedArray<ZFlowNode> result;
+	ZFlowGraph *graph = owning_graph;
+	if (!graph && runtime_player) {
+		Ref<ZFlowGraph> g = runtime_player->get_flow_graph();
+		graph = g.ptr();
 	}
-	if (GDVIRTUAL_CALL(_choose_output, player_obj, result)) {
+	if (!graph || node_id.is_empty()) {
 		return result;
 	}
-	if (_script_has_method(StringName("_choose_output"))) {
-		Variant v = call("_choose_output", player_obj);
-		if (v.get_type() == Variant::INT) {
-			return (int64_t)v;
+
+	// Deduplicate by instance id.
+	HashMap<uint64_t, bool> seen;
+
+	auto push_unique = [&](const Ref<ZFlowNode> &n) {
+		if (n.is_null()) {
+			return;
+		}
+		uint64_t id = n->get_instance_id();
+		if (seen.has(id)) {
+			return;
+		}
+		seen[id] = true;
+		result.push_back(n);
+	};
+
+	if (p_output) {
+		if (p_output_pin < 0) {
+			for (int port = 0; port < outputs.size(); port++) {
+				TypedArray<Dictionary> list = graph->get_connections_from(node_id, port);
+				for (int i = 0; i < list.size(); i++) {
+					Dictionary c = list[i];
+					push_unique(graph->get_node(String(c.get("to_node", ""))));
+				}
+			}
+			// Also connections from ports beyond declared outputs (defensive).
+			TypedArray<Dictionary> all = graph->get_connections();
+			for (int i = 0; i < all.size(); i++) {
+				Dictionary c = all[i];
+				if (String(c.get("from_node", "")) != node_id) {
+					continue;
+				}
+				push_unique(graph->get_node(String(c.get("to_node", ""))));
+			}
+		} else {
+			TypedArray<Dictionary> list = graph->get_connections_from(node_id, p_output_pin);
+			for (int i = 0; i < list.size(); i++) {
+				Dictionary c = list[i];
+				push_unique(graph->get_node(String(c.get("to_node", ""))));
+			}
 		}
 	}
-	return 0;
+
+	if (p_input) {
+		TypedArray<Dictionary> list = graph->get_connections_to(node_id, p_input_pin);
+		for (int i = 0; i < list.size(); i++) {
+			Dictionary c = list[i];
+			push_unique(graph->get_node(String(c.get("from_node", ""))));
+		}
+	}
+
+	return result;
+}
+
+bool ZFlowNode::trigger_output(int32_t p_output, int32_t p_connection, bool p_stop_node) {
+	if (!active || !runtime_player) {
+		return false;
+	}
+	ZFlowGraph *graph = owning_graph;
+	if (!graph) {
+		Ref<ZFlowGraph> g = runtime_player->get_flow_graph();
+		graph = g.ptr();
+	}
+	if (!graph) {
+		return false;
+	}
+
+	TypedArray<Dictionary> list = graph->get_connections_from(node_id, p_output);
+	if (list.is_empty()) {
+		if (p_stop_node) {
+			stop_node();
+		}
+		return false;
+	}
+
+	// Snapshot targets before we may deactivate.
+	struct Target {
+		Ref<ZFlowNode> node;
+		int32_t pin = 0;
+	};
+	LocalVector<Target> targets;
+	if (p_connection < 0) {
+		for (int i = 0; i < list.size(); i++) {
+			Dictionary c = list[i];
+			Target t;
+			t.node = graph->get_node(String(c.get("to_node", "")));
+			t.pin = int32_t(c.get("to_port", 0));
+			if (t.node.is_valid()) {
+				targets.push_back(t);
+			}
+		}
+	} else {
+		if (p_connection >= list.size()) {
+			if (p_stop_node) {
+				stop_node();
+			}
+			return false;
+		}
+		Dictionary c = list[p_connection];
+		Target t;
+		t.node = graph->get_node(String(c.get("to_node", "")));
+		t.pin = int32_t(c.get("to_port", 0));
+		if (t.node.is_valid()) {
+			targets.push_back(t);
+		}
+	}
+
+	Ref<ZFlowNode> self = this;
+	ZFlowPlayer *player = runtime_player;
+	player->_begin_transition();
+	if (p_stop_node) {
+		player->deactivate_node(self, p_output);
+	}
+
+	bool any = false;
+	for (uint32_t i = 0; i < targets.size(); i++) {
+		if (!player->is_playing()) {
+			break;
+		}
+		player->activate_node(targets[i].node, targets[i].pin, self, p_output);
+		any = true;
+	}
+	player->_end_transition();
+	return any;
+}
+
+bool ZFlowNode::trigger_output_to_node(const Ref<ZFlowNode> &p_node, int32_t p_input, bool p_only_if_connected, bool p_stop_node) {
+	if (!active || !runtime_player || p_node.is_null()) {
+		return false;
+	}
+	ZFlowGraph *graph = owning_graph;
+	if (!graph) {
+		Ref<ZFlowGraph> g = runtime_player->get_flow_graph();
+		graph = g.ptr();
+	}
+	if (!graph) {
+		return false;
+	}
+
+	int32_t used_output = -1;
+	if (p_only_if_connected) {
+		bool found = false;
+		TypedArray<Dictionary> all = graph->get_connections();
+		for (int i = 0; i < all.size(); i++) {
+			Dictionary c = all[i];
+			if (String(c.get("from_node", "")) != node_id) {
+				continue;
+			}
+			if (String(c.get("to_node", "")) != p_node->get_node_id()) {
+				continue;
+			}
+			if (int32_t(c.get("to_port", -1)) != p_input) {
+				continue;
+			}
+			used_output = int32_t(c.get("from_port", 0));
+			found = true;
+			break;
+		}
+		if (!found) {
+			return false;
+		}
+	}
+
+	Ref<ZFlowNode> self = this;
+	ZFlowPlayer *player = runtime_player;
+	player->_begin_transition();
+	if (p_stop_node) {
+		player->deactivate_node(self, used_output);
+	}
+	if (player->is_playing()) {
+		player->activate_node(p_node, p_input, self, used_output);
+	}
+	player->_end_transition();
+	return true;
+}
+
+void ZFlowNode::stop_node() {
+	if (!active || !runtime_player) {
+		active = false;
+		runtime_player = nullptr;
+		return;
+	}
+	Ref<ZFlowNode> self = this;
+	runtime_player->deactivate_node(self, -1);
 }

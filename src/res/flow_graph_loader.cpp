@@ -28,16 +28,16 @@ bool FlowGraphLoader::_recognize_path(const String &p_path, const StringName &p_
 	if (p_path.get_extension().to_lower() != "gdflow") {
 		return false;
 	}
-	return p_type == StringName() || p_type == StringName("FlowGraph") || p_type == StringName("Resource");
+	return p_type == StringName() || p_type == StringName("ZFlowGraph") || p_type == StringName("Resource");
 }
 
 bool FlowGraphLoader::_handles_type(const StringName &p_type) const {
-	return p_type == StringName("FlowGraph") || p_type == StringName("Resource");
+	return p_type == StringName("ZFlowGraph") || p_type == StringName("Resource");
 }
 
 String FlowGraphLoader::_get_resource_type(const String &p_path) const {
 	if (p_path.get_extension().to_lower() == "gdflow") {
-		return "FlowGraph";
+		return "ZFlowGraph";
 	}
 	return "";
 }
@@ -56,13 +56,13 @@ Variant FlowGraphLoader::_load(const String &p_path, const String &p_original_pa
 	String text = FileAccess::get_file_as_string(path);
 	Variant parsed = JSON::parse_string(text);
 	if (parsed.get_type() != Variant::DICTIONARY) {
-		UtilityFunctions::push_error("FlowGraphLoader: invalid JSON in ", path, " (legacy .gdflow). Prefer FlowGraph .tres.");
+		UtilityFunctions::push_error("FlowGraphLoader: invalid JSON in ", path, " (legacy .gdflow). Prefer ZFlowGraph .tres.");
 		return Variant();
 	}
 
 	UtilityFunctions::push_warning("FlowGraphLoader: loaded legacy .gdflow '", path, "'. Save as .tres to use Godot resource serialization (script properties were not stored in JSON).");
 
-	Ref<FlowGraph> graph = FlowGraph::from_dict(parsed);
+	Ref<ZFlowGraph> graph = ZFlowGraph::from_dict(parsed);
 	if (graph.is_valid()) {
 		// Don't bind path to .gdflow — next save should write .tres via the editor.
 		graph->set_path("");

@@ -1,0 +1,10 @@
+=== Copy ZanDot into Godot project ===
+Source: D:\Github\ZanDot\
+Dest:   D:\Github\ZanDot\..\LibertyBelle_Christmas\godot\addons\ZanDot
+
+Installed ZanDot to:
+  D:\Github\ZanDot\..\LibertyBelle_Christmas\godot\addons\ZanDot\zandot.gdextension
+  D:\Github\ZanDot\..\LibertyBelle_Christmas\godot\addons\ZanDot\bin\
+
+Restart or reload the Godot editor if it is already open.
+Create resources via: Create New -> Resource -> ZResource

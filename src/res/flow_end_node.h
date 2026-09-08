@@ -4,8 +4,8 @@
 
 namespace godot {
 
-class FlowEndNode : public FlowNode {
-	GDCLASS(FlowEndNode, FlowNode)
+class FlowEndNode : public ZFlowNode {
+	GDCLASS(FlowEndNode, ZFlowNode)
 
 protected:
 	static void _bind_methods();

@@ -6,6 +6,20 @@
 
 using namespace godot;
 
+namespace {
+
+// Inspector hint for Dictionary[StringName, ZCreatureData].
+String creature_data_hint() {
+	return String::num_int64(Variant::STRING_NAME) + "/" + String::num_int64(PROPERTY_HINT_NONE) + ":;" +
+			String::num_int64(Variant::OBJECT) + "/" + String::num_int64(PROPERTY_HINT_RESOURCE_TYPE) + ":ZCreatureData";
+}
+
+Dictionary as_creature_data_dict(const Dictionary &p_from) {
+	return Dictionary(p_from, Variant::STRING_NAME, StringName(), Variant(), Variant::OBJECT, StringName("ZCreatureData"), Variant());
+}
+
+} // namespace
+
 void ZSave::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_params", "params"), &ZSave::set_params);
 	ClassDB::bind_method(D_METHOD("get_params"), &ZSave::get_params);
@@ -19,6 +33,14 @@ void ZSave::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_save_seed", "seed"), &ZSave::set_save_seed);
 	ClassDB::bind_method(D_METHOD("get_save_seed"), &ZSave::get_save_seed);
 
+	ClassDB::bind_method(D_METHOD("set_creature_data", "creature_data"), &ZSave::set_creature_data);
+	ClassDB::bind_method(D_METHOD("get_creature_data"), &ZSave::get_creature_data);
+
+	ClassDB::bind_method(D_METHOD("creature_data_get", "id"), &ZSave::creature_data_get);
+	ClassDB::bind_method(D_METHOD("creature_data_set", "id", "data"), &ZSave::creature_data_set);
+	ClassDB::bind_method(D_METHOD("CreatureData_Get", "id"), &ZSave::creature_data_get);
+	ClassDB::bind_method(D_METHOD("CreatureData_Set", "id", "data"), &ZSave::creature_data_set);
+
 	ClassDB::bind_method(D_METHOD("initialize_new"), &ZSave::initialize_new);
 	ClassDB::bind_method(D_METHOD("touch_saved"), &ZSave::touch_saved);
 
@@ -26,9 +48,11 @@ void ZSave::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "date_created"), "set_date_created", "get_date_created");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "date_last_saved"), "set_date_last_saved", "get_date_last_saved");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "save_seed"), "set_save_seed", "get_save_seed");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "creature_data", PROPERTY_HINT_DICTIONARY_TYPE, creature_data_hint()), "set_creature_data", "get_creature_data");
 }
 
 ZSave::ZSave() {
+	creature_data = as_creature_data_dict(Dictionary());
 }
 
 ZSave::~ZSave() {
@@ -77,6 +101,32 @@ void ZSave::set_save_seed(int64_t p_seed) {
 
 int64_t ZSave::get_save_seed() const {
 	return save_seed;
+}
+
+void ZSave::set_creature_data(const Dictionary &p_creature_data) {
+	creature_data = as_creature_data_dict(p_creature_data);
+	emit_changed();
+}
+
+Dictionary ZSave::get_creature_data() const {
+	return creature_data;
+}
+
+Ref<ZCreatureData> ZSave::creature_data_get(const StringName &p_id) const {
+	if (!creature_data.has(p_id)) {
+		return Ref<ZCreatureData>();
+	}
+	Ref<ZCreatureData> data = creature_data[p_id];
+	return data;
+}
+
+void ZSave::creature_data_set(const StringName &p_id, const Ref<ZCreatureData> &p_data) {
+	if (p_data.is_null()) {
+		creature_data.erase(p_id);
+	} else {
+		creature_data[p_id] = p_data;
+	}
+	emit_changed();
 }
 
 void ZSave::initialize_new() {

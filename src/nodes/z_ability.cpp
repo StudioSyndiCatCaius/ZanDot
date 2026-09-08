@@ -1,5 +1,5 @@
 #include "z_ability.h"
-#include "z_ability_manager.h"
+#include "z_creature.h"
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
@@ -22,7 +22,9 @@ void ZAbility::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_utility_score", "context"), &ZAbility::get_utility_score, DEFVAL(Variant()));
 	ClassDB::bind_method(D_METHOD("Ability_GetUtilityScore", "context"), &ZAbility::get_utility_score, DEFVAL(Variant()));
 
-	ClassDB::bind_method(D_METHOD("get_ability_manager"), &ZAbility::get_ability_manager);
+	ClassDB::bind_method(D_METHOD("creature_notify", "notify"), &ZAbility::creature_notify);
+
+	ClassDB::bind_method(D_METHOD("get_creature"), &ZAbility::get_creature);
 	ClassDB::bind_method(D_METHOD("get_root_owner"), &ZAbility::get_root_owner);
 
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "input_action"), "set_input_action", "get_input_action");
@@ -37,6 +39,7 @@ void ZAbility::_bind_methods() {
 	GDVIRTUAL_BIND(_process_activated_ability, "delta");
 	GDVIRTUAL_BIND(_get_utility_score, "context");
 	GDVIRTUAL_BIND(_ability_can_activate, "context");
+	GDVIRTUAL_BIND(_on_creature_notify, "notify");
 }
 
 void ZAbility::_notification(int p_what) {
@@ -98,9 +101,9 @@ bool ZAbility::ability_activate(const Variant &p_context) {
 
 	emit_signal("on_ability_activated", p_context);
 
-	ZAbilityManager *manager = get_ability_manager();
-	if (manager != nullptr) {
-		manager->_notify_ability_activated(this, p_context);
+	ZCreature *creature = get_creature();
+	if (creature != nullptr) {
+		creature->_notify_ability_activated(this, p_context);
 	}
 
 	if (GDVIRTUAL_IS_OVERRIDDEN(_on_ability_activated)) {
@@ -124,9 +127,9 @@ void ZAbility::ability_stop(bool p_cancelled) {
 
 	emit_signal("on_ability_finished", p_cancelled);
 
-	ZAbilityManager *manager = get_ability_manager();
-	if (manager != nullptr) {
-		manager->_notify_ability_finished(this, p_cancelled);
+	ZCreature *creature = get_creature();
+	if (creature != nullptr) {
+		creature->_notify_ability_finished(this, p_cancelled);
 	}
 
 	if (GDVIRTUAL_IS_OVERRIDDEN(_on_ability_finished)) {
@@ -162,12 +165,22 @@ float ZAbility::get_utility_score(const Variant &p_context) {
 	return ret;
 }
 
-ZAbilityManager *ZAbility::get_ability_manager() const {
+void ZAbility::creature_notify(const String &p_notify) {
+	if (GDVIRTUAL_IS_OVERRIDDEN(_on_creature_notify)) {
+		GDVIRTUAL_CALL(_on_creature_notify, p_notify);
+	} else if (has_method("_on_creature_notify")) {
+		call("_on_creature_notify", p_notify);
+	} else {
+		on_creature_notify(p_notify);
+	}
+}
+
+ZCreature *ZAbility::get_creature() const {
 	Node *parent = get_parent();
 	while (parent != nullptr) {
-		ZAbilityManager *manager = Object::cast_to<ZAbilityManager>(parent);
-		if (manager != nullptr) {
-			return manager;
+		ZCreature *creature = Object::cast_to<ZCreature>(parent);
+		if (creature != nullptr) {
+			return creature;
 		}
 		parent = parent->get_parent();
 	}
@@ -175,9 +188,9 @@ ZAbilityManager *ZAbility::get_ability_manager() const {
 }
 
 Node *ZAbility::get_root_owner() const {
-	ZAbilityManager *manager = get_ability_manager();
-	if (manager != nullptr) {
-		return manager->get_root_owner();
+	ZCreature *creature = get_creature();
+	if (creature != nullptr) {
+		return creature->get_root_owner();
 	}
 	return nullptr;
 }
@@ -200,6 +213,10 @@ float ZAbility::on_get_utility_score(const Variant &p_context) {
 
 bool ZAbility::on_ability_can_activate(const Variant &p_context) {
 	return true;
+}
+
+void ZAbility::on_creature_notify(const String &p_notify) {
+	// no-op default
 }
 
 ZAbility::ZAbility() {

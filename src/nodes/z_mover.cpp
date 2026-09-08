@@ -1,15 +1,11 @@
 #include "z_mover.h"
 
 #include <godot_cpp/classes/engine.hpp>
-#include <godot_cpp/classes/node2d.hpp>
-#include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/math.hpp>
 #include <godot_cpp/variant/quaternion.hpp>
-#include <godot_cpp/variant/transform2d.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
 
 using namespace godot;
 
@@ -33,12 +29,18 @@ void ZMover::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_auto_find_body"), &ZMover::get_auto_find_body);
 
 	ClassDB::bind_method(D_METHOD("move_by_input", "input"), &ZMover::move_by_input);
-	ClassDB::bind_method(D_METHOD("move_by_look", "input", "look"), &ZMover::move_by_look);
-	ClassDB::bind_method(D_METHOD("launch", "dir", "scale", "override_side_velocity", "override_up_velocity"), &ZMover::launch, DEFVAL(true), DEFVAL(true));
+	ClassDB::bind_method(D_METHOD("move_by_look", "input", "rotation"), &ZMover::move_by_look);
+	ClassDB::bind_method(D_METHOD("move_by_look_degrees", "input", "rotation_degrees"), &ZMover::move_by_look_degrees);
+	ClassDB::bind_method(D_METHOD("move_by_look_quaternion", "input", "look"), &ZMover::move_by_look_quaternion);
+	ClassDB::bind_method(D_METHOD("move_to_position", "position"), &ZMover::move_to_position);
+	ClassDB::bind_method(D_METHOD("launch", "dir", "scale", "override_side_velocity", "override_up_velocity", "reset_gravity_curve"), &ZMover::launch, DEFVAL(true), DEFVAL(true), DEFVAL(false));
 
 	ClassDB::bind_method(D_METHOD("Move_ByInput", "input"), &ZMover::Move_ByInput);
-	ClassDB::bind_method(D_METHOD("Move_ByLook", "input", "look"), &ZMover::Move_ByLook);
-	ClassDB::bind_method(D_METHOD("Launch", "dir", "scale", "override_side_velocity", "override_up_velocity"), &ZMover::Launch, DEFVAL(true), DEFVAL(true));
+	ClassDB::bind_method(D_METHOD("Move_ByLook", "input", "rotation"), &ZMover::Move_ByLook);
+	ClassDB::bind_method(D_METHOD("Move_ByLookDegrees", "input", "rotation_degrees"), &ZMover::Move_ByLookDegrees);
+	ClassDB::bind_method(D_METHOD("Move_ByLookQuaternion", "input", "look"), &ZMover::Move_ByLookQuaternion);
+	ClassDB::bind_method(D_METHOD("Move_ToPosition", "position"), &ZMover::Move_ToPosition);
+	ClassDB::bind_method(D_METHOD("Launch", "dir", "scale", "override_side_velocity", "override_up_velocity", "reset_gravity_curve"), &ZMover::Launch, DEFVAL(true), DEFVAL(true), DEFVAL(false));
 
 	ClassDB::bind_method(D_METHOD("is_on_floor"), &ZMover::is_on_floor);
 
@@ -75,41 +77,35 @@ void ZMover::_notification(int p_what) {
 			_resolve_bodies_if_needed();
 			const double dt = get_physics_process_delta_time();
 			const Vector3 up = -move_mode->get_gravity_dir_normalized();
+			const bool grounded = is_on_floor();
+			if (grounded) {
+				fall_time = 0.0;
+			} else {
+				fall_time += dt;
+			}
 			// Require Move_By* each frame while holding input; otherwise decelerate to stop.
 			if (!wish_pending) {
 				wish_dir = Vector3();
 			}
 			wish_pending = false;
 
-			const bool rotate_move = move_mode->get_rotate_with_movement();
-			const bool tank = move_mode->get_forward_adjust_rotation();
-
-			// Tank-like: rotate body toward wish first, then integrate along facing.
-			// Strafe: integrate toward wish first, then face velocity.
-			if (rotate_move && tank) {
+			// Rotate toward the *input* direction, not current velocity — velocity swings
+			// fast at low speed and slow at high speed, which made turn rate look like it
+			// scaled with speed. Unreal's OrientRotationToMovement faces acceleration at a
+			// flat rad/s; with no input we keep the current facing.
+			// Tank mode additionally relies on rotating before integrating, since
+			// _integrate_horizontal pushes along the body's facing.
+			if (move_mode->get_rotate_with_movement()) {
 				Vector3 wish = _project_onto_plane(wish_dir, up);
 				if (wish.length_squared() > 1e-12f) {
 					_rotate_body_toward(wish.normalized(), up, dt);
 				}
 			}
 
-			_integrate_horizontal(dt, up);
-
-			if (rotate_move && !tank) {
-				Vector3 horizontal;
-				(void)_split_vertical(velocity, up, horizontal);
-				if (horizontal.length_squared() > 1e-12f) {
-					_rotate_body_toward(horizontal.normalized(), up, dt);
-				} else {
-					Vector3 wish = _project_onto_plane(wish_dir, up);
-					if (wish.length_squared() > 1e-12f) {
-						_rotate_body_toward(wish.normalized(), up, dt);
-					}
-				}
-			}
+			_integrate_horizontal(dt, up, grounded);
 
 			if (apply_gravity) {
-				_integrate_gravity(dt, up);
+				_integrate_gravity(dt, up, grounded);
 			}
 			_apply_to_bodies(dt);
 		} break;
@@ -139,7 +135,7 @@ void ZMover::_resolve_bodies_if_needed() {
 	}
 }
 
-float ZMover::_project_gravity_strength() const {
+float ZMover::_project_gravity_strength(float p_fall_time) const {
 	ProjectSettings *ps = ProjectSettings::get_singleton();
 	float g = 9.8f;
 	if (body_3d != nullptr && ps != nullptr && ps->has_setting("physics/3d/default_gravity")) {
@@ -149,7 +145,7 @@ float ZMover::_project_gravity_strength() const {
 	} else if (ps != nullptr && ps->has_setting("physics/3d/default_gravity")) {
 		g = ps->get_setting("physics/3d/default_gravity");
 	}
-	return g * move_mode->get_gravity_scale();
+	return g * move_mode->get_gravity_scale() * move_mode->sample_gravity_accel_scale(p_fall_time);
 }
 
 Vector3 ZMover::_project_onto_plane(const Vector3 &p_vec, const Vector3 &p_normal) const {
@@ -242,7 +238,7 @@ void ZMover::_rotate_body_toward(const Vector3 &p_target_dir, const Vector3 &p_u
 	}
 }
 
-void ZMover::_integrate_horizontal(double p_delta, const Vector3 &p_up) {
+void ZMover::_integrate_horizontal(double p_delta, const Vector3 &p_up, bool p_grounded) {
 	Vector3 horizontal;
 	const Vector3 vertical = _split_vertical(velocity, p_up, horizontal);
 
@@ -255,7 +251,15 @@ void ZMover::_integrate_horizontal(double p_delta, const Vector3 &p_up) {
 
 	const float speed = move_mode->get_move_speed();
 	const bool has_input = wish.length_squared() > 1e-12f;
-	const float rate = has_input ? move_mode->get_move_accel() : move_mode->get_move_decel();
+	float rate;
+	if (has_input) {
+		rate = move_mode->get_move_accel();
+		if (!p_grounded) {
+			rate *= move_mode->get_air_control();
+		}
+	} else {
+		rate = p_grounded ? move_mode->get_move_decel() : move_mode->get_air_friction();
+	}
 
 	Vector3 target;
 	if (has_input && move_mode->get_forward_adjust_rotation()) {
@@ -283,9 +287,9 @@ void ZMover::_integrate_horizontal(double p_delta, const Vector3 &p_up) {
 	velocity = horizontal + vertical;
 }
 
-void ZMover::_integrate_gravity(double p_delta, const Vector3 &p_up) {
+void ZMover::_integrate_gravity(double p_delta, const Vector3 &p_up, bool p_grounded) {
 	// Skip gravity while grounded and not trying to leave the floor (keeps is_on_floor stable).
-	if (is_on_floor() && velocity.dot(p_up) <= 0.0f) {
+	if (p_grounded && velocity.dot(p_up) <= 0.0f) {
 		// Kill residual downward speed into the floor.
 		Vector3 horizontal;
 		(void)_split_vertical(velocity, p_up, horizontal);
@@ -293,7 +297,7 @@ void ZMover::_integrate_gravity(double p_delta, const Vector3 &p_up) {
 		return;
 	}
 
-	const float g = _project_gravity_strength();
+	const float g = _project_gravity_strength((float)fall_time);
 	velocity += (-p_up) * g * (float)p_delta;
 }
 
@@ -316,53 +320,52 @@ void ZMover::_apply_to_bodies(double p_delta) {
 	}
 }
 
-Basis ZMover::_look_to_basis(const Variant &p_look) const {
-	switch (p_look.get_type()) {
-		case Variant::BASIS:
-			return p_look;
-		case Variant::QUATERNION:
-			return Basis(p_look.operator Quaternion());
-		case Variant::TRANSFORM3D:
-			return p_look.operator Transform3D().basis;
-		case Variant::VECTOR3: {
-			const Vector3 forward = p_look.operator Vector3();
-			if (forward.length_squared() < 1e-12f) {
-				return Basis();
-			}
-			// Build a look basis: -Z forward (Godot camera convention), Y up.
-			return Basis::looking_at(forward.normalized(), Vector3(0, 1, 0));
+void ZMover::_move_by_look_basis(const Vector2 &p_input, const Basis &p_basis) {
+	Vector2 in = p_input;
+	if (in.length_squared() > 1.0f) {
+		in = in.normalized();
+	}
+	wish_pending = true;
+	if (in.length_squared() < 1e-12f) {
+		wish_dir = Vector3();
+		return;
+	}
+
+	if (body_2d != nullptr && body_3d == nullptr) {
+		// 2D: use basis X/Y as local right/forward on the plane.
+		const Vector3 right = Vector3(p_basis.get_column(0).x, p_basis.get_column(0).y, 0.0f);
+		const Vector3 forward = Vector3(p_basis.get_column(1).x, p_basis.get_column(1).y, 0.0f);
+		Vector3 dir = right * in.x + forward * in.y;
+		if (dir.length_squared() > 1e-12f) {
+			wish_dir = dir.normalized();
+		} else {
+			wish_dir = Vector3();
 		}
-		case Variant::FLOAT:
-		case Variant::INT: {
-			// 2D angle in radians (rotation around Z).
-			const float angle = (float)p_look.operator double();
-			return Basis(Vector3(0, 0, 1), angle);
-		}
-		case Variant::TRANSFORM2D: {
-			const Transform2D t = p_look;
-			// Map 2D X/Y axes into 3D X/Y.
-			const Vector2 x = t.columns[0];
-			const Vector2 y = t.columns[1];
-			return Basis(Vector3(x.x, x.y, 0), Vector3(y.x, y.y, 0), Vector3(0, 0, 1));
-		}
-		case Variant::OBJECT: {
-			Object *obj = p_look;
-			if (obj == nullptr) {
-				return Basis();
-			}
-			Node3D *n3 = Object::cast_to<Node3D>(obj);
-			if (n3 != nullptr) {
-				return n3->get_global_transform().basis;
-			}
-			Node2D *n2 = Object::cast_to<Node2D>(obj);
-			if (n2 != nullptr) {
-				const float angle = n2->get_global_rotation();
-				return Basis(Vector3(0, 0, 1), angle);
-			}
-			return Basis();
-		}
-		default:
-			return Basis();
+		return;
+	}
+
+	// 3D: project camera right/forward onto ground plane (perp to gravity).
+	_ensure_move_mode();
+	const Vector3 up = -move_mode->get_gravity_dir_normalized();
+	// Godot camera: -Z is forward, +X is right.
+	Vector3 right = _project_onto_plane(p_basis.get_column(0), up);
+	Vector3 forward = _project_onto_plane(-p_basis.get_column(2), up);
+	if (right.length_squared() > 1e-12f) {
+		right = right.normalized();
+	} else {
+		right = Vector3();
+	}
+	if (forward.length_squared() > 1e-12f) {
+		forward = forward.normalized();
+	} else {
+		forward = Vector3();
+	}
+
+	Vector3 dir = right * in.x + forward * in.y;
+	if (dir.length_squared() > 1e-12f) {
+		wish_dir = dir.normalized();
+	} else {
+		wish_dir = Vector3();
 	}
 }
 
@@ -430,58 +433,51 @@ void ZMover::move_by_input(const Vector2 &p_input) {
 	wish_pending = true;
 }
 
-void ZMover::move_by_look(const Vector2 &p_input, const Variant &p_look) {
-	Vector2 in = p_input;
-	if (in.length_squared() > 1.0f) {
-		in = in.normalized();
-	}
-	wish_pending = true;
-	if (in.length_squared() < 1e-12f) {
-		wish_dir = Vector3();
-		return;
-	}
-
-	const Basis basis = _look_to_basis(p_look);
-
-	if (body_2d != nullptr && body_3d == nullptr) {
-		// 2D: use basis X/Y as local right/forward on the plane.
-		const Vector3 right = Vector3(basis.get_column(0).x, basis.get_column(0).y, 0.0f);
-		const Vector3 forward = Vector3(basis.get_column(1).x, basis.get_column(1).y, 0.0f);
-		Vector3 dir = right * in.x + forward * in.y;
-		if (dir.length_squared() > 1e-12f) {
-			wish_dir = dir.normalized();
-		} else {
-			wish_dir = Vector3();
-		}
-		return;
-	}
-
-	// 3D: project camera right/forward onto ground plane (perp to gravity).
-	_ensure_move_mode();
-	const Vector3 up = -move_mode->get_gravity_dir_normalized();
-	// Godot camera: -Z is forward, +X is right.
-	Vector3 right = _project_onto_plane(basis.get_column(0), up);
-	Vector3 forward = _project_onto_plane(-basis.get_column(2), up);
-	if (right.length_squared() > 1e-12f) {
-		right = right.normalized();
-	} else {
-		right = Vector3();
-	}
-	if (forward.length_squared() > 1e-12f) {
-		forward = forward.normalized();
-	} else {
-		forward = Vector3();
-	}
-
-	Vector3 dir = right * in.x + forward * in.y;
-	if (dir.length_squared() > 1e-12f) {
-		wish_dir = dir.normalized();
-	} else {
-		wish_dir = Vector3();
-	}
+void ZMover::move_by_look(const Vector2 &p_input, const Vector3 &p_rotation) {
+	_move_by_look_basis(p_input, Basis::from_euler(p_rotation));
 }
 
-void ZMover::launch(const Vector3 &p_dir, float p_scale, bool p_override_side_velocity, bool p_override_up_velocity) {
+void ZMover::move_by_look_degrees(const Vector2 &p_input, const Vector3 &p_rotation_degrees) {
+	const Vector3 rotation(
+			Math::deg_to_rad(p_rotation_degrees.x),
+			Math::deg_to_rad(p_rotation_degrees.y),
+			Math::deg_to_rad(p_rotation_degrees.z));
+	_move_by_look_basis(p_input, Basis::from_euler(rotation));
+}
+
+void ZMover::move_by_look_quaternion(const Vector2 &p_input, const Quaternion &p_look) {
+	_move_by_look_basis(p_input, Basis(p_look));
+}
+
+void ZMover::move_to_position(const Vector3 &p_position) {
+	_resolve_bodies_if_needed();
+
+	Vector3 body_pos;
+	if (body_3d != nullptr && body_3d->is_inside_tree()) {
+		body_pos = body_3d->get_global_transform().origin;
+	} else if (body_2d != nullptr && body_2d->is_inside_tree()) {
+		const Vector2 p2 = body_2d->get_global_position();
+		body_pos = Vector3(p2.x, p2.y, 0.0f);
+	} else {
+		return;
+	}
+
+	const Vector3 delta = p_position - body_pos;
+	Vector2 input;
+	if (body_2d != nullptr && body_3d == nullptr) {
+		input = Vector2(delta.x, delta.y);
+	} else {
+		input = Vector2(delta.x, delta.z);
+	}
+	if (input.length_squared() > 1e-12f) {
+		input = input.normalized();
+	} else {
+		input = Vector2();
+	}
+	move_by_input(input);
+}
+
+void ZMover::launch(const Vector3 &p_dir, float p_scale, bool p_override_side_velocity, bool p_override_up_velocity, bool p_reset_gravity_curve) {
 	_ensure_move_mode();
 	Vector3 dir = p_dir;
 	if (dir.length_squared() < 1e-12f) {
@@ -507,18 +503,34 @@ void ZMover::launch(const Vector3 &p_dir, float p_scale, bool p_override_side_ve
 		vert += imp_vert;
 	}
 	velocity = horiz + vert;
+
+	if (p_reset_gravity_curve) {
+		fall_time = 0.0;
+	}
 }
 
 void ZMover::Move_ByInput(const Vector2 &p_input) {
 	move_by_input(p_input);
 }
 
-void ZMover::Move_ByLook(const Vector2 &p_input, const Variant &p_look) {
-	move_by_look(p_input, p_look);
+void ZMover::Move_ByLook(const Vector2 &p_input, const Vector3 &p_rotation) {
+	move_by_look(p_input, p_rotation);
 }
 
-void ZMover::Launch(const Vector3 &p_dir, float p_scale, bool p_override_side_velocity, bool p_override_up_velocity) {
-	launch(p_dir, p_scale, p_override_side_velocity, p_override_up_velocity);
+void ZMover::Move_ByLookDegrees(const Vector2 &p_input, const Vector3 &p_rotation_degrees) {
+	move_by_look_degrees(p_input, p_rotation_degrees);
+}
+
+void ZMover::Move_ByLookQuaternion(const Vector2 &p_input, const Quaternion &p_look) {
+	move_by_look_quaternion(p_input, p_look);
+}
+
+void ZMover::Move_ToPosition(const Vector3 &p_position) {
+	move_to_position(p_position);
+}
+
+void ZMover::Launch(const Vector3 &p_dir, float p_scale, bool p_override_side_velocity, bool p_override_up_velocity, bool p_reset_gravity_curve) {
+	launch(p_dir, p_scale, p_override_side_velocity, p_override_up_velocity, p_reset_gravity_curve);
 }
 
 bool ZMover::is_on_floor() const {
